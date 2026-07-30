@@ -130,3 +130,9 @@ dmypy.json
 
 .idea/
 *.tmp
+
+# Specific project files to ignore
+/OUTPUT_FILES/
+/EXTRACTED_FILES/
+/snapshots_samples/
+*.csv

@@ -16,9 +16,12 @@ import requests
 import urllib.request
 import wget
 import zipfile
+import xml.etree.ElementTree as ET
+import csv
+from io import StringIO
 
 
-def check_diff(url, file_name):
+def check_diff(url, file_name, token):
     '''
     Verifica se o arquivo no servidor existe no disco e se ele tem o mesmo
     tamanho no servidor.
@@ -26,7 +29,10 @@ def check_diff(url, file_name):
     if not os.path.isfile(file_name):
         return True # ainda nao foi baixado
 
-    response = requests.head(url)
+    headers = {
+        "X-Requested-With": "XMLHttpRequest",
+    }
+    response = requests.head(url, auth=(token, ""), headers=headers)
     new_size = int(response.headers.get('content-length', 0))
     old_size = os.path.getsize(file_name)
     if new_size != old_size:
@@ -45,11 +51,31 @@ def makedirs(path):
         os.makedirs(path)
 
 #%%
+def psql_insert_copy(table, conn, keys, data_iter):
+    """
+    Execute SQL statement inserting data using PostgreSQL COPY
+    """
+    dbapi_conn = conn.connection
+    with dbapi_conn.cursor() as cur:
+        s_buf = StringIO()
+        writer = csv.writer(s_buf)
+        writer.writerows(data_iter)
+        s_buf.seek(0)
+        
+        columns = ', '.join(['"{}"'.format(k) for k in keys])
+        if table.schema:
+            table_name = '{}.{}'.format(table.schema, table.name)
+        else:
+            table_name = table.name
+            
+        sql = 'COPY {} ({}) FROM STDIN WITH CSV'.format(table_name, columns)
+        cur.copy_expert(sql=sql, file=s_buf)
+
 def to_sql(dataframe, **kwargs):
     '''
-    Quebra em pedacos a tarefa de inserir registros no banco
+    Quebra em pedacos a tarefa de inserir registros no banco usando COPY
     '''
-    size = 4096  #TODO param
+    size = 100000  # Aumentado para melhor performance com COPY
     total = len(dataframe)
     name = kwargs.get('name')
 
@@ -57,8 +83,10 @@ def to_sql(dataframe, **kwargs):
         return (df[i:i + size] for i in range(0, len(df), size))
 
     for i, df in enumerate(chunker(dataframe)):
-        df.to_sql(**kwargs)
-        index = i * size
+        df.to_sql(method=psql_insert_copy, **kwargs)
+        index = (i + 1) * size
+        if index > total:
+            index = total
         percent = (index * 100) / total
         progress = f'{name} {percent:.2f}% {index:0{len(str(total))}}/{total}'
         sys.stdout.write(f'\r{progress}')
@@ -73,12 +101,15 @@ def getEnv(env):
 current_path = pathlib.Path().resolve()
 dotenv_path = os.path.join(current_path, '.env')
 if not os.path.isfile(dotenv_path):
-    print('Especifique o local do seu arquivo de configuração ".env". Por exemplo: C:\...\Receita_Federal_do_Brasil_-_Dados_Publicos_CNPJ\code')
-    # C:\Aphonso_C\Git\Receita_Federal_do_Brasil_-_Dados_Publicos_CNPJ\code
-    local_env = input()
-    dotenv_path = os.path.join(local_env, '.env')
-print(dotenv_path)
+    # Try directory of the script
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    dotenv_path = os.path.join(script_dir, '.env')
+if not os.path.isfile(dotenv_path):
+    print("Arquivo .env não encontrado!")
+    sys.exit(1)
+print("Using .env file at:", dotenv_path)
 load_dotenv(dotenv_path=dotenv_path)
+
 
 dados_rf = 'http://200.152.38.155/CNPJ/'
 
@@ -98,37 +129,38 @@ try:
           'extracted_files: ' + str(extracted_files))
 except:
     pass
-    print('Erro na definição dos diretórios, verifique o arquivo ".env" ou o local informado do seu arquivo de configuração.')
+    print('Erro na definição dos diretórios, verifique o arquivo ".env" ou o local informado do seu arquivo de configuração')
 
-#%%
-raw_html = urllib.request.urlopen(dados_rf)
-raw_html = raw_html.read()
+# WebDAV / Nextcloud integration
+share_url = getEnv('NEXTCLOUD_SHARE_URL') or 'https://arquivos.receitafederal.gov.br/index.php/s/YggdBLfdninEJX9'
+data_folder = getEnv('NEXTCLOUD_FOLDER') or '2026-06'
 
-# Formatar página e converter em string
-page_items = bs.BeautifulSoup(raw_html, 'lxml')
-html_str = str(page_items)
+# Extract token from share_url
+token = share_url.rstrip('/').split('/')[-1]
+webdav_base = "https://arquivos.receitafederal.gov.br/public.php/webdav/"
+webdav_url = f"{webdav_base}{data_folder}/"
 
-# Obter arquivos
+print(f"Buscando arquivos no WebDAV Nextcloud: {webdav_url}")
+headers = {
+    "X-Requested-With": "XMLHttpRequest",
+    "Depth": "1"
+}
+response = requests.request("PROPFIND", webdav_url, auth=(token, ""), headers=headers)
+response.raise_for_status()
+
+root = ET.fromstring(response.content)
+ns = {"d": "DAV:"}
 Files = []
-text = '.zip'
-for m in re.finditer(text, html_str):
-    i_start = m.start()-40
-    i_end = m.end()
-    i_loc = html_str[i_start:i_end].find('href=')+6
-    Files.append(html_str[i_start+i_loc:i_end])
+for resp in root.findall(".//d:response", ns):
+    href = resp.find("d:href", ns)
+    if href is not None:
+        path = href.text
+        if path.endswith('.zip'):
+            filename = os.path.basename(path)
+            Files.append(filename)
 
-# Correcao do nome dos arquivos devido a mudanca na estrutura do HTML da pagina - 31/07/22 - Aphonso Rafael
-Files_clean = []
-for i in range(len(Files)):
-    if not Files[i].find('.zip">') > -1:
-        Files_clean.append(Files[i])
+Files.sort()
 
-try:
-    del Files
-except:
-    pass
-
-Files = Files_clean
 
 print('Arquivos que serão baixados:')
 i_f = 0
@@ -136,36 +168,37 @@ for f in Files:
     i_f += 1
     print(str(i_f) + ' - ' + f)
 
-#%%
-########################################################################################################################
-## DOWNLOAD ############################################################################################################
-########################################################################################################################
-# Create this bar_progress method which is invoked automatically from wget:
-def bar_progress(current, total, width=80):
-  progress_message = "Downloading: %d%% [%d / %d] bytes - " % (current / total * 100, current, total)
-  # Don't use print() as it will print in new line every time.
-  sys.stdout.write("\r" + progress_message)
-  sys.stdout.flush()
-
-#%%
 # Download arquivos ################################################################################################################################
 i_l = 0
 for l in Files:
-    # Download dos arquivos
     i_l += 1
-    print('Baixando arquivo:')
-    print(str(i_l) + ' - ' + l)
-    url = dados_rf+l
+    url = f"{webdav_url}{l}"
     file_name = os.path.join(output_files, l)
-    if check_diff(url, file_name):
-        wget.download(url, out=output_files, bar=bar_progress)
-
-#%%
-# Download layout:
-# FIXME está pedindo login gov.br
-# Layout = 'https://www.gov.br/receitafederal/pt-br/assuntos/orientacao-tributaria/cadastros/consultas/arquivos/NOVOLAYOUTDOSDADOSABERTOSDOCNPJ.pdf'
-# print('Baixando layout:')
-# wget.download(Layout, out=output_files, bar=bar_progress)
+    print(f'Processando arquivo ({i_l}/{len(Files)}): {l}')
+    if check_diff(url, file_name, token):
+        print(f"Iniciando download de {url}")
+        headers = {
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        with requests.get(url, auth=(token, ""), headers=headers, stream=True) as r:
+            r.raise_for_status()
+            total_size = int(r.headers.get('content-length', 0))
+            block_size = 1024 * 1024  # 1 MB
+            downloaded = 0
+            with open(file_name, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=block_size):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size > 0:
+                            percent = (downloaded / total_size) * 100
+                            sys.stdout.write(f"\rProgresso: {percent:.2f}% [{downloaded / (1024*1024):.1f}MB / {total_size / (1024*1024):.1f}MB]")
+                        else:
+                            sys.stdout.write(f"\rProgresso: {downloaded / (1024*1024):.1f}MB")
+                        sys.stdout.flush()
+            sys.stdout.write("\n")
+    else:
+        print(f"Arquivo {l} já está atualizado no disco local.")
 
 ####################################################################################################################################################
 
@@ -663,6 +696,30 @@ for e in range(0, len(arquivos_munic)):
     # Renomear colunas
     munic.columns = ['codigo', 'descricao']
 
+    # Acoplar códigos IBGE a partir de municipios.csv se existir
+    proj_dir = os.path.dirname(dotenv_path)
+    csv_path = os.path.join(proj_dir, 'municipios.csv')
+    if os.path.isfile(csv_path):
+        print(f"Acoplando códigos IBGE a partir de: {csv_path}...")
+        df_csv = pd.read_csv(csv_path, sep=';', encoding='latin1')
+        df_csv.columns = [col.strip() for col in df_csv.columns]
+        mapping = df_csv[['CÓDIGO DO MUNICÍPIO - TOM', 'CÓDIGO DO MUNICÍPIO - IBGE']].copy()
+        mapping.columns = ['codigo', 'cd_mun']
+        mapping = mapping.drop_duplicates(subset=['codigo'])
+        
+        # Inserir manualmente o registro de Boa Esperança do Norte
+        if 1182 not in mapping['codigo'].values:
+            new_row = pd.DataFrame([{'codigo': 1182, 'cd_mun': 5101837}])
+            mapping = pd.concat([mapping, new_row], ignore_index=True)
+            
+        mapping['codigo'] = mapping['codigo'].astype('Int32')
+        mapping['cd_mun'] = mapping['cd_mun'].astype('Int32')
+        munic['codigo'] = munic['codigo'].astype('Int32')
+        
+        munic = pd.merge(munic, mapping, on='codigo', how='left')
+    else:
+        print(f"Aviso: arquivo {csv_path} não encontrado. Coluna cd_mun não será populada.")
+
     # Gravar dados no banco:
     # munic
     to_sql(munic, name='munic', con=engine, if_exists='append', index=False)
@@ -840,26 +897,15 @@ print("""
 ## Criar índices na base de dados [...]
 #######################################
 """)
-cur.execute("""
-create index if not exists empresa_cnpj on empresa(cnpj_basico);
-commit;
-create index if not exists estabelecimento_cnpj on estabelecimento(cnpj_basico);
-commit;
-create index if not exists socios_cnpj on socios(cnpj_basico);
-commit;
-create index if not exists simples_cnpj on simples(cnpj_basico);
-commit;
-""")
-conn.commit()
-print("""
-############################################################
-## Índices criados nas tabelas, para a coluna `cnpj_basico`:
-   - empresa
-   - estabelecimento
-   - socios
-   - simples
-############################################################
-""")
+for table_name in ["empresa", "estabelecimento", "socios", "simples"]:
+    cur.execute(f"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = '{table_name}');")
+    exists = cur.fetchone()[0]
+    if exists:
+        print(f"Criando índice para {table_name} [...]")
+        cur.execute(f"create index if not exists {table_name}_cnpj on {table_name}(cnpj_basico);")
+        conn.commit()
+        print(f"Índice {table_name}_cnpj criado com sucesso!")
+
 index_end = time.time()
 index_time = round(index_end - index_start)
 print('Tempo para criar os índices (em segundos): ' + str(index_time))
