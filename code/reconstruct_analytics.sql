@@ -1023,3 +1023,10 @@ SELECT
     (k.cnpj_basico IS NULL) AS is_static
 FROM analytics.reconstructed_partners p
 LEFT JOIN analytics.changed_company_keys k ON p.cnpj_basic = k.cnpj_basico;
+
+CREATE OR REPLACE VIEW analytics.v_reconstructed_partner_summaries AS
+SELECT 
+    ps.*,
+    (k.cnpj_basico IS NULL) AS is_static
+FROM analytics.reconstructed_partner_summaries ps
+LEFT JOIN analytics.changed_company_keys k ON ps.cnpj_basic = k.cnpj_basico;

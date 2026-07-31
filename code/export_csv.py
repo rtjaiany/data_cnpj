@@ -28,6 +28,7 @@ try:
         ('analytics.v_reconstructed_companies', 'v_reconstructed_companies.csv'),
         ('analytics.v_reconstructed_simples', 'v_reconstructed_simples.csv'),
         ('analytics.v_reconstructed_partners', 'v_reconstructed_partners.csv'),
+        ('analytics.v_reconstructed_partner_summaries', 'v_reconstructed_partner_summaries.csv'),
         ('analytics.longitudinal_establishment_intervals', 'longitudinal_establishment_intervals.csv'),
         ('analytics.establishment_transitions', 'establishment_transitions.csv')
     ]
@@ -49,7 +50,7 @@ try:
         if limit:
             if 'establishments' in view:
                 query = f"SELECT * FROM {view} ORDER BY reference_month, cnpj_basic, cnpj_order, cnpj_dv LIMIT {limit}"
-            elif 'companies' in view or 'simples' in view or 'partners' in view:
+            elif 'companies' in view or 'simples' in view or 'partners' in view or 'summaries' in view:
                 query = f"SELECT * FROM {view} ORDER BY reference_month, cnpj_basic LIMIT {limit}"
             elif 'transitions' in view:
                 query = f"SELECT * FROM {view} ORDER BY cnpj_basic, cnpj_order, cnpj_dv, reference_month, variable_name LIMIT {limit}"
