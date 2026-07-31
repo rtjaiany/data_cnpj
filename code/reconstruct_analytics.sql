@@ -528,7 +528,8 @@ BEGIN
                         mu.cd_mun, t.uf
                     FROM temp_changed_establishment t
                     LEFT JOIN public.munic mu ON t.municipio = mu.codigo
-                    WHERE t.uf = 'SP';
+                    WHERE t.uf = 'SP'
+                      AND (t.data_inicio_atividade IS NULL OR analytics.safe_parse_date(t.data_inicio_atividade) < (target_month || '-01')::DATE + INTERVAL '1 month');
 
                     -- B. Save Companies (changed temp tables only)
                     INSERT INTO analytics.reconstructed_companies (
@@ -540,8 +541,8 @@ BEGIN
                         t.porte_empresa, t.qualificacao_responsavel
                     FROM temp_changed_company t
                     WHERE EXISTS (
-                        SELECT 1 FROM temp_changed_establishment_keys e 
-                        WHERE e.cnpj_basico = t.cnpj_basico
+                        SELECT 1 FROM analytics.reconstructed_establishments e 
+                        WHERE e.reference_month = target_month AND e.cnpj_basic = t.cnpj_basico
                     );
 
                     -- C. Save Simples status (changed temp tables only)
@@ -558,8 +559,8 @@ BEGIN
                         analytics.safe_parse_date(t.data_exclusao_mei)
                     FROM temp_changed_simples t
                     WHERE EXISTS (
-                        SELECT 1 FROM temp_changed_establishment_keys e 
-                        WHERE e.cnpj_basico = t.cnpj_basico
+                        SELECT 1 FROM analytics.reconstructed_establishments e 
+                        WHERE e.reference_month = target_month AND e.cnpj_basic = t.cnpj_basico
                     );
 
                     -- D. Save Individual Partners (changed temp tables only)
@@ -583,9 +584,10 @@ BEGIN
                         t.faixa_etaria
                     FROM temp_changed_socios t
                     WHERE EXISTS (
-                        SELECT 1 FROM temp_changed_establishment_keys e 
-                        WHERE e.cnpj_basico = t.cnpj_basico
-                    );
+                        SELECT 1 FROM analytics.reconstructed_establishments e 
+                        WHERE e.reference_month = target_month AND e.cnpj_basic = t.cnpj_basico
+                    )
+                    AND (t.data_entrada_sociedade IS NULL OR analytics.safe_parse_date(t.data_entrada_sociedade) < (target_month || '-01')::DATE + INTERVAL '1 month');
 
                     -- E. Save Partner Summaries (changed temp tables only)
                     INSERT INTO analytics.reconstructed_partner_summaries (
@@ -678,7 +680,8 @@ BEGIN
           WHERE k.cnpj_basico = e.cnpj_basico 
             AND k.cnpj_ordem = e.cnpj_ordem 
             AND k.cnpj_dv = e.cnpj_dv
-      );
+      )
+      AND (e.data_inicio_atividade IS NULL OR analytics.safe_parse_date(e.data_inicio_atividade) < (m.month || '-01')::DATE + INTERVAL '1 month');
 
     RAISE INFO 'Bulk inserting static companies...';
     INSERT INTO analytics.reconstructed_companies (
@@ -690,7 +693,10 @@ BEGIN
         c.porte_empresa, c.qualificacao_responsavel
     FROM public.empresa c
     CROSS JOIN (SELECT unnest(ARRAY['2023-05','2023-06','2023-07','2023-08','2023-09','2023-10']) AS month) m
-    WHERE c.cnpj_basico IN (SELECT cnpj_basico FROM temp_unchanged_sp_company_keys)
+    WHERE EXISTS (
+        SELECT 1 FROM analytics.reconstructed_establishments e
+        WHERE e.reference_month = m.month AND e.cnpj_basic = c.cnpj_basico
+    )
       AND NOT EXISTS (
           SELECT 1 FROM temp_changed_company_keys k WHERE k.cnpj_basico = c.cnpj_basico
       );
@@ -709,7 +715,10 @@ BEGIN
         analytics.safe_parse_date(s.data_exclusao_mei)
     FROM public.simples s
     CROSS JOIN (SELECT unnest(ARRAY['2023-05','2023-06','2023-07','2023-08','2023-09','2023-10']) AS month) m
-    WHERE s.cnpj_basico IN (SELECT cnpj_basico FROM temp_unchanged_sp_company_keys)
+    WHERE EXISTS (
+        SELECT 1 FROM analytics.reconstructed_establishments e
+        WHERE e.reference_month = m.month AND e.cnpj_basic = s.cnpj_basico
+    )
       AND NOT EXISTS (
           SELECT 1 FROM temp_changed_company_keys k WHERE k.cnpj_basico = s.cnpj_basico
       );
@@ -735,7 +744,11 @@ BEGIN
         s.faixa_etaria
     FROM public.socios s
     CROSS JOIN (SELECT unnest(ARRAY['2023-05','2023-06','2023-07','2023-08','2023-09','2023-10']) AS month) m
-    WHERE s.cnpj_basico IN (SELECT cnpj_basico FROM temp_unchanged_sp_company_keys)
+    WHERE EXISTS (
+        SELECT 1 FROM analytics.reconstructed_establishments e
+        WHERE e.reference_month = m.month AND e.cnpj_basic = s.cnpj_basico
+    )
+      AND (s.data_entrada_sociedade IS NULL OR analytics.safe_parse_date(s.data_entrada_sociedade) < (m.month || '-01')::DATE + INTERVAL '1 month')
       AND NOT EXISTS (
           SELECT 1 FROM temp_changed_company_keys k WHERE k.cnpj_basico = s.cnpj_basico
       );
