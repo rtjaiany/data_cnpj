@@ -541,8 +541,9 @@ BEGIN
                         t.porte_empresa, t.qualificacao_responsavel
                     FROM temp_changed_company t
                     WHERE EXISTS (
-                        SELECT 1 FROM analytics.reconstructed_establishments e 
-                        WHERE e.reference_month = target_month AND e.cnpj_basic = t.cnpj_basico
+                        SELECT 1 FROM temp_changed_establishment e 
+                        WHERE e.cnpj_basico = t.cnpj_basico AND e.uf = 'SP'
+                          AND (e.data_inicio_atividade IS NULL OR analytics.safe_parse_date(e.data_inicio_atividade) < (target_month || '-01')::DATE + INTERVAL '1 month')
                     );
 
                     -- C. Save Simples status (changed temp tables only)
@@ -559,8 +560,9 @@ BEGIN
                         analytics.safe_parse_date(t.data_exclusao_mei)
                     FROM temp_changed_simples t
                     WHERE EXISTS (
-                        SELECT 1 FROM analytics.reconstructed_establishments e 
-                        WHERE e.reference_month = target_month AND e.cnpj_basic = t.cnpj_basico
+                        SELECT 1 FROM temp_changed_establishment e 
+                        WHERE e.cnpj_basico = t.cnpj_basico AND e.uf = 'SP'
+                          AND (e.data_inicio_atividade IS NULL OR analytics.safe_parse_date(e.data_inicio_atividade) < (target_month || '-01')::DATE + INTERVAL '1 month')
                     );
 
                     -- D. Save Individual Partners (changed temp tables only)
@@ -584,8 +586,9 @@ BEGIN
                         t.faixa_etaria
                     FROM temp_changed_socios t
                     WHERE EXISTS (
-                        SELECT 1 FROM analytics.reconstructed_establishments e 
-                        WHERE e.reference_month = target_month AND e.cnpj_basic = t.cnpj_basico
+                        SELECT 1 FROM temp_changed_establishment e 
+                        WHERE e.cnpj_basico = t.cnpj_basico AND e.uf = 'SP'
+                          AND (e.data_inicio_atividade IS NULL OR analytics.safe_parse_date(e.data_inicio_atividade) < (target_month || '-01')::DATE + INTERVAL '1 month')
                     )
                     AND (t.data_entrada_sociedade IS NULL OR analytics.safe_parse_date(t.data_entrada_sociedade) < (target_month || '-01')::DATE + INTERVAL '1 month');
 
@@ -694,8 +697,13 @@ BEGIN
     FROM public.empresa c
     CROSS JOIN (SELECT unnest(ARRAY['2023-05','2023-06','2023-07','2023-08','2023-09','2023-10']) AS month) m
     WHERE EXISTS (
-        SELECT 1 FROM analytics.reconstructed_establishments e
-        WHERE e.reference_month = m.month AND e.cnpj_basic = c.cnpj_basico
+        SELECT 1 FROM public.estabelecimento e
+        WHERE e.cnpj_basico = c.cnpj_basico AND e.uf = 'SP'
+          AND NOT EXISTS (
+              SELECT 1 FROM temp_changed_establishment_keys k 
+              WHERE k.cnpj_basico = e.cnpj_basico AND k.cnpj_ordem = e.cnpj_ordem AND k.cnpj_dv = e.cnpj_dv
+          )
+          AND (e.data_inicio_atividade IS NULL OR analytics.safe_parse_date(e.data_inicio_atividade) < (m.month || '-01')::DATE + INTERVAL '1 month')
     )
       AND NOT EXISTS (
           SELECT 1 FROM temp_changed_company_keys k WHERE k.cnpj_basico = c.cnpj_basico
@@ -716,8 +724,13 @@ BEGIN
     FROM public.simples s
     CROSS JOIN (SELECT unnest(ARRAY['2023-05','2023-06','2023-07','2023-08','2023-09','2023-10']) AS month) m
     WHERE EXISTS (
-        SELECT 1 FROM analytics.reconstructed_establishments e
-        WHERE e.reference_month = m.month AND e.cnpj_basic = s.cnpj_basico
+        SELECT 1 FROM public.estabelecimento e
+        WHERE e.cnpj_basico = s.cnpj_basico AND e.uf = 'SP'
+          AND NOT EXISTS (
+              SELECT 1 FROM temp_changed_establishment_keys k 
+              WHERE k.cnpj_basico = e.cnpj_basico AND k.cnpj_ordem = e.cnpj_ordem AND k.cnpj_dv = e.cnpj_dv
+          )
+          AND (e.data_inicio_atividade IS NULL OR analytics.safe_parse_date(e.data_inicio_atividade) < (m.month || '-01')::DATE + INTERVAL '1 month')
     )
       AND NOT EXISTS (
           SELECT 1 FROM temp_changed_company_keys k WHERE k.cnpj_basico = s.cnpj_basico
@@ -745,8 +758,13 @@ BEGIN
     FROM public.socios s
     CROSS JOIN (SELECT unnest(ARRAY['2023-05','2023-06','2023-07','2023-08','2023-09','2023-10']) AS month) m
     WHERE EXISTS (
-        SELECT 1 FROM analytics.reconstructed_establishments e
-        WHERE e.reference_month = m.month AND e.cnpj_basic = s.cnpj_basico
+        SELECT 1 FROM public.estabelecimento e
+        WHERE e.cnpj_basico = s.cnpj_basico AND e.uf = 'SP'
+          AND NOT EXISTS (
+              SELECT 1 FROM temp_changed_establishment_keys k 
+              WHERE k.cnpj_basico = e.cnpj_basico AND k.cnpj_ordem = e.cnpj_ordem AND k.cnpj_dv = e.cnpj_dv
+          )
+          AND (e.data_inicio_atividade IS NULL OR analytics.safe_parse_date(e.data_inicio_atividade) < (m.month || '-01')::DATE + INTERVAL '1 month')
     )
       AND (s.data_entrada_sociedade IS NULL OR analytics.safe_parse_date(s.data_entrada_sociedade) < (m.month || '-01')::DATE + INTERVAL '1 month')
       AND NOT EXISTS (
