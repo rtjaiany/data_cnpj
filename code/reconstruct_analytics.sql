@@ -240,6 +240,7 @@ CREATE OR REPLACE PROCEDURE analytics.reconstruct_temporal_data() AS $$
 DECLARE
     months text[] := ARRAY['2023-12', '2023-11', '2023-10', '2023-09', '2023-08', '2023-07', '2023-06', '2023-05'];
     curr_month text;
+    target_month_end_str text;
 BEGIN
     RAISE INFO 'Starting temporal reconstruction pipeline...';
 
@@ -510,7 +511,8 @@ BEGIN
                 END CASE;
 
                 IF target_month IS NOT NULL THEN
-                    RAISE INFO 'Saving consolidated states for Reference Month: %', target_month;
+                    target_month_end_str := to_char(((target_month || '-01')::DATE + INTERVAL '1 month' - INTERVAL '1 day'), 'YYYYMMDD');
+                    RAISE INFO 'Saving consolidated states for Reference Month: % (End Date String: %)', target_month, target_month_end_str;
 
                     -- A. Save Establishments (SP only, changed temp tables only)
                     INSERT INTO analytics.reconstructed_establishments (
@@ -529,7 +531,7 @@ BEGIN
                     FROM temp_changed_establishment t
                     LEFT JOIN public.munic mu ON t.municipio = mu.codigo
                     WHERE t.uf = 'SP'
-                      AND (t.data_inicio_atividade IS NULL OR analytics.safe_parse_date(t.data_inicio_atividade) < (target_month || '-01')::DATE + INTERVAL '1 month');
+                      AND (t.data_inicio_atividade IS NULL OR t.data_inicio_atividade <= target_month_end_str);
 
                     -- B. Save Companies (changed temp tables only)
                     INSERT INTO analytics.reconstructed_companies (
@@ -543,7 +545,7 @@ BEGIN
                     WHERE EXISTS (
                         SELECT 1 FROM temp_changed_establishment e 
                         WHERE e.cnpj_basico = t.cnpj_basico AND e.uf = 'SP'
-                          AND (e.data_inicio_atividade IS NULL OR analytics.safe_parse_date(e.data_inicio_atividade) < (target_month || '-01')::DATE + INTERVAL '1 month')
+                          AND (e.data_inicio_atividade IS NULL OR e.data_inicio_atividade <= target_month_end_str)
                     );
 
                     -- C. Save Simples status (changed temp tables only)
@@ -562,7 +564,7 @@ BEGIN
                     WHERE EXISTS (
                         SELECT 1 FROM temp_changed_establishment e 
                         WHERE e.cnpj_basico = t.cnpj_basico AND e.uf = 'SP'
-                          AND (e.data_inicio_atividade IS NULL OR analytics.safe_parse_date(e.data_inicio_atividade) < (target_month || '-01')::DATE + INTERVAL '1 month')
+                          AND (e.data_inicio_atividade IS NULL OR e.data_inicio_atividade <= target_month_end_str)
                     );
 
                     -- D. Save Individual Partners (changed temp tables only)
@@ -588,9 +590,9 @@ BEGIN
                     WHERE EXISTS (
                         SELECT 1 FROM temp_changed_establishment e 
                         WHERE e.cnpj_basico = t.cnpj_basico AND e.uf = 'SP'
-                          AND (e.data_inicio_atividade IS NULL OR analytics.safe_parse_date(e.data_inicio_atividade) < (target_month || '-01')::DATE + INTERVAL '1 month')
+                          AND (e.data_inicio_atividade IS NULL OR e.data_inicio_atividade <= target_month_end_str)
                     )
-                    AND (t.data_entrada_sociedade IS NULL OR analytics.safe_parse_date(t.data_entrada_sociedade) < (target_month || '-01')::DATE + INTERVAL '1 month');
+                    AND (t.data_entrada_sociedade IS NULL OR t.data_entrada_sociedade <= target_month_end_str);
 
                     -- E. Save Partner Summaries (changed temp tables only)
                     INSERT INTO analytics.reconstructed_partner_summaries (
@@ -684,7 +686,7 @@ BEGIN
             AND k.cnpj_ordem = e.cnpj_ordem 
             AND k.cnpj_dv = e.cnpj_dv
       )
-      AND (e.data_inicio_atividade IS NULL OR analytics.safe_parse_date(e.data_inicio_atividade) < (m.month || '-01')::DATE + INTERVAL '1 month');
+      AND (e.data_inicio_atividade IS NULL OR e.data_inicio_atividade <= to_char(((m.month || '-01')::DATE + INTERVAL '1 month' - INTERVAL '1 day'), 'YYYYMMDD'));
 
     RAISE INFO 'Bulk inserting static companies...';
     INSERT INTO analytics.reconstructed_companies (
@@ -703,7 +705,7 @@ BEGIN
               SELECT 1 FROM temp_changed_establishment_keys k 
               WHERE k.cnpj_basico = e.cnpj_basico AND k.cnpj_ordem = e.cnpj_ordem AND k.cnpj_dv = e.cnpj_dv
           )
-          AND (e.data_inicio_atividade IS NULL OR analytics.safe_parse_date(e.data_inicio_atividade) < (m.month || '-01')::DATE + INTERVAL '1 month')
+          AND (e.data_inicio_atividade IS NULL OR e.data_inicio_atividade <= to_char(((m.month || '-01')::DATE + INTERVAL '1 month' - INTERVAL '1 day'), 'YYYYMMDD'))
     )
       AND NOT EXISTS (
           SELECT 1 FROM temp_changed_company_keys k WHERE k.cnpj_basico = c.cnpj_basico
@@ -730,7 +732,7 @@ BEGIN
               SELECT 1 FROM temp_changed_establishment_keys k 
               WHERE k.cnpj_basico = e.cnpj_basico AND k.cnpj_ordem = e.cnpj_ordem AND k.cnpj_dv = e.cnpj_dv
           )
-          AND (e.data_inicio_atividade IS NULL OR analytics.safe_parse_date(e.data_inicio_atividade) < (m.month || '-01')::DATE + INTERVAL '1 month')
+          AND (e.data_inicio_atividade IS NULL OR e.data_inicio_atividade <= to_char(((m.month || '-01')::DATE + INTERVAL '1 month' - INTERVAL '1 day'), 'YYYYMMDD'))
     )
       AND NOT EXISTS (
           SELECT 1 FROM temp_changed_company_keys k WHERE k.cnpj_basico = s.cnpj_basico
@@ -764,9 +766,9 @@ BEGIN
               SELECT 1 FROM temp_changed_establishment_keys k 
               WHERE k.cnpj_basico = e.cnpj_basico AND k.cnpj_ordem = e.cnpj_ordem AND k.cnpj_dv = e.cnpj_dv
           )
-          AND (e.data_inicio_atividade IS NULL OR analytics.safe_parse_date(e.data_inicio_atividade) < (m.month || '-01')::DATE + INTERVAL '1 month')
+          AND (e.data_inicio_atividade IS NULL OR e.data_inicio_atividade <= to_char(((m.month || '-01')::DATE + INTERVAL '1 month' - INTERVAL '1 day'), 'YYYYMMDD'))
     )
-      AND (s.data_entrada_sociedade IS NULL OR analytics.safe_parse_date(s.data_entrada_sociedade) < (m.month || '-01')::DATE + INTERVAL '1 month')
+      AND (s.data_entrada_sociedade IS NULL OR s.data_entrada_sociedade <= to_char(((m.month || '-01')::DATE + INTERVAL '1 month' - INTERVAL '1 day'), 'YYYYMMDD'))
       AND NOT EXISTS (
           SELECT 1 FROM temp_changed_company_keys k WHERE k.cnpj_basico = s.cnpj_basico
       );
