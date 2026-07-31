@@ -66,6 +66,26 @@ try:
             cur.copy_expert(copy_sql, f)
         print(f"Completed export of {filename}!")
         
+    # Free space if a full export was performed (limit is None)
+    if limit is None:
+        print("Freeing database space by truncating analytical tables...")
+        tables_to_truncate = [
+            'reconstructed_establishments',
+            'reconstructed_companies',
+            'reconstructed_simples',
+            'reconstructed_partners',
+            'reconstructed_partner_summaries',
+            'longitudinal_establishment_intervals',
+            'establishment_transitions'
+        ]
+        for tbl in tables_to_truncate:
+            try:
+                cur.execute(f"TRUNCATE TABLE analytics.{tbl} CASCADE;")
+            except Exception as e:
+                print(f"Warning: Failed to truncate {tbl}: {e}")
+        conn.commit()
+        print("Database space freed successfully!")
+        
     cur.close()
     conn.close()
     print("All exports completed successfully!")
