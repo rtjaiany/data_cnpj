@@ -35,7 +35,7 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 -- ==============================================================================
--- 2. SCHEMA DICTIONARY (Step 9)
+-- 2. SCHEMA DICTIONARY
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS analytics.schema_dictionary (
     id SERIAL PRIMARY KEY,
@@ -81,7 +81,7 @@ INSERT INTO analytics.schema_dictionary (source_table, original_variable_name, t
 ('socios', 'faixa_etaria', 'age_range', 'INTEGER', 'Código de faixa etária do sócio');
 
 -- ==============================================================================
--- 3. ANALYTICAL TARGET TABLES (Step 5)
+-- 3. ANALYTICAL TARGET TABLES
 -- ==============================================================================
 
 -- Reconstructed Establishments
@@ -144,7 +144,7 @@ CREATE TABLE analytics.reconstructed_partners (
 );
 CREATE INDEX IF NOT EXISTS idx_rec_part_ref_cnpj ON analytics.reconstructed_partners (reference_month, cnpj_basic);
 
--- Reconstructed Partner Summaries (Step 8)
+-- Reconstructed Partner Summaries
 CREATE TABLE IF NOT EXISTS analytics.reconstructed_partner_summaries (
     reference_month VARCHAR(7) NOT NULL,
     cnpj_basic VARCHAR(8) NOT NULL,
@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS analytics.reconstructed_partner_summaries (
     PRIMARY KEY (reference_month, cnpj_basic)
 );
 
--- Reconstructed Longitudinal Intervals (Step 6)
+-- Reconstructed Longitudinal Intervals
 CREATE TABLE IF NOT EXISTS analytics.longitudinal_establishment_intervals (
     cnpj_basic VARCHAR(8) NOT NULL,
     cnpj_order VARCHAR(4) NOT NULL,
@@ -178,7 +178,7 @@ CREATE TABLE IF NOT EXISTS analytics.longitudinal_establishment_intervals (
     PRIMARY KEY (cnpj_basic, cnpj_order, cnpj_dv, valid_from_month)
 );
 
--- Reconstructed Transitions (Step 7)
+-- Reconstructed Transitions
 CREATE TABLE IF NOT EXISTS analytics.establishment_transitions (
     cnpj_basic VARCHAR(8) NOT NULL,
     cnpj_order VARCHAR(4) NOT NULL,
@@ -198,7 +198,7 @@ CREATE INDEX IF NOT EXISTS idx_rec_est_munic ON analytics.reconstructed_establis
 CREATE INDEX IF NOT EXISTS idx_rec_est_status ON analytics.reconstructed_establishments(registration_status);
 
 -- ==============================================================================
--- 4. PRECALCULATING MONTHLY PARTNER EVENTS (Step 8 Additions/Removals)
+-- 4. PRECALCULATING MONTHLY PARTNER EVENTS (Additions/Removals)
 -- ==============================================================================
 -- DROP MATERIALIZED VIEW IF EXISTS analytics.changed_company_keys CASCADE;
 CREATE MATERIALIZED VIEW IF NOT EXISTS analytics.changed_company_keys AS
@@ -233,7 +233,7 @@ GROUP BY mes_referencia, cnpj_basico;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_partner_monthly_events_ref_cnpj ON analytics.partner_monthly_events (mes_referencia, cnpj_basico);
 
 -- ==============================================================================
--- 5. TEMPORAL RECONSTRUCTION PROCEDURE (Steps 1, 2, 3, 4, 5)
+-- 5. TEMPORAL RECONSTRUCTION PROCEDURE
 -- ==============================================================================
 
 CREATE OR REPLACE PROCEDURE analytics.reconstruct_temporal_data() AS $$
@@ -301,7 +301,7 @@ BEGIN
     ON CONFLICT (cnpj_basico, nome_socio_razao_social) DO NOTHING;
     ANALYZE temp_changed_socios;
 
-    -- ITERATIVE REVERSE CHRONOLOGICAL PROCESSING (Step 3)
+    -- ITERATIVE REVERSE CHRONOLOGICAL PROCESSING
     FOR i IN 1..array_length(months, 1) LOOP
         curr_month := months[i];
         RAISE INFO '------------------------------------------------';
@@ -496,10 +496,6 @@ BEGIN
             DECLARE
                 target_month text;
             BEGIN
-                -- Mapear a qual mês de referência histórico corresponde o estado atual:
-                -- Se i=2 (reverteu Nov), salvamos como '2023-10'
-                -- Se i=3 (reverteu Out), salvamos como '2023-09'
-                -- Se i=7 (reverteu Jun), salvamos como '2023-05'
                 CASE i
                     WHEN 2 THEN target_month := '2023-10';
                     WHEN 3 THEN target_month := '2023-09';
@@ -662,6 +658,24 @@ BEGIN
     CREATE UNIQUE INDEX ON temp_unchanged_sp_company_keys (cnpj_basico);
     ANALYZE temp_unchanged_sp_company_keys;
 
+    RAISE INFO 'Identifying active unchanged companies with SP establishments per month...';
+    CREATE TEMP TABLE temp_active_unchanged_sp_companies AS
+    SELECT DISTINCT e.cnpj_basico, m.month
+    FROM public.estabelecimento e
+    CROSS JOIN (SELECT unnest(ARRAY['2023-05','2023-06','2023-07','2023-08','2023-09','2023-10']) AS month) m
+    WHERE e.uf = 'SP'
+      AND NOT EXISTS (
+          SELECT 1 FROM temp_changed_establishment_keys k 
+          WHERE k.cnpj_basico = e.cnpj_basico 
+            AND k.cnpj_ordem = e.cnpj_ordem 
+            AND k.cnpj_dv = e.cnpj_dv
+      )
+      AND (e.data_inicio_atividade IS NULL OR e.data_inicio_atividade <= to_char(((m.month || '-01')::DATE + INTERVAL '1 month' - INTERVAL '1 day'), 'YYYYMMDD')::integer);
+
+    CREATE UNIQUE INDEX ON temp_active_unchanged_sp_companies (cnpj_basico, month);
+    CREATE INDEX ON temp_active_unchanged_sp_companies (cnpj_basico);
+    ANALYZE temp_active_unchanged_sp_companies;
+
     RAISE INFO 'Bulk inserting static establishments for SP...';
     INSERT INTO analytics.reconstructed_establishments (
         reference_month, cnpj_basic, cnpj_order, cnpj_dv, opening_date,
@@ -694,22 +708,13 @@ BEGIN
         company_size, responsible_qualification
     )
     SELECT 
-        m.month, c.cnpj_basico, c.capital_social, c.natureza_juridica, 
+        t.month, c.cnpj_basico, c.capital_social, c.natureza_juridica, 
         c.porte_empresa, c.qualificacao_responsavel
     FROM public.empresa c
-    CROSS JOIN (SELECT unnest(ARRAY['2023-05','2023-06','2023-07','2023-08','2023-09','2023-10']) AS month) m
-    WHERE EXISTS (
-        SELECT 1 FROM public.estabelecimento e
-        WHERE e.cnpj_basico = c.cnpj_basico AND e.uf = 'SP'
-          AND NOT EXISTS (
-              SELECT 1 FROM temp_changed_establishment_keys k 
-              WHERE k.cnpj_basico = e.cnpj_basico AND k.cnpj_ordem = e.cnpj_ordem AND k.cnpj_dv = e.cnpj_dv
-          )
-          AND (e.data_inicio_atividade IS NULL OR e.data_inicio_atividade <= to_char(((m.month || '-01')::DATE + INTERVAL '1 month' - INTERVAL '1 day'), 'YYYYMMDD')::integer)
-    )
-      AND NOT EXISTS (
-          SELECT 1 FROM temp_changed_company_keys k WHERE k.cnpj_basico = c.cnpj_basico
-      );
+    JOIN temp_active_unchanged_sp_companies t ON t.cnpj_basico = c.cnpj_basico
+    WHERE NOT EXISTS (
+        SELECT 1 FROM temp_changed_company_keys k WHERE k.cnpj_basico = c.cnpj_basico
+    );
 
     RAISE INFO 'Bulk inserting static simples...';
     INSERT INTO analytics.reconstructed_simples (
@@ -717,26 +722,17 @@ BEGIN
         simples_exclusion_date, mei_enrollment_status, mei_entry_date, mei_exclusion_date
     )
     SELECT 
-        m.month, s.cnpj_basico, s.opcao_pelo_simples, 
+        t.month, s.cnpj_basico, s.opcao_pelo_simples, 
         analytics.safe_parse_date(s.data_opcao_simples), 
         analytics.safe_parse_date(s.data_exclusao_simples),
         s.opcao_mei, 
         analytics.safe_parse_date(s.data_opcao_mei), 
         analytics.safe_parse_date(s.data_exclusao_mei)
     FROM public.simples s
-    CROSS JOIN (SELECT unnest(ARRAY['2023-05','2023-06','2023-07','2023-08','2023-09','2023-10']) AS month) m
-    WHERE EXISTS (
-        SELECT 1 FROM public.estabelecimento e
-        WHERE e.cnpj_basico = s.cnpj_basico AND e.uf = 'SP'
-          AND NOT EXISTS (
-              SELECT 1 FROM temp_changed_establishment_keys k 
-              WHERE k.cnpj_basico = e.cnpj_basico AND k.cnpj_ordem = e.cnpj_ordem AND k.cnpj_dv = e.cnpj_dv
-          )
-          AND (e.data_inicio_atividade IS NULL OR e.data_inicio_atividade <= to_char(((m.month || '-01')::DATE + INTERVAL '1 month' - INTERVAL '1 day'), 'YYYYMMDD')::integer)
-    )
-      AND NOT EXISTS (
-          SELECT 1 FROM temp_changed_company_keys k WHERE k.cnpj_basico = s.cnpj_basico
-      );
+    JOIN temp_active_unchanged_sp_companies t ON t.cnpj_basico = s.cnpj_basico
+    WHERE NOT EXISTS (
+        SELECT 1 FROM temp_changed_company_keys k WHERE k.cnpj_basico = s.cnpj_basico
+    );
 
     RAISE INFO 'Bulk inserting static partners...';
     INSERT INTO analytics.reconstructed_partners (
@@ -747,7 +743,7 @@ BEGIN
         representative_qualification, age_range
     )
     SELECT 
-        m.month, s.cnpj_basico, s.identificador_socio,
+        t.month, s.cnpj_basico, s.identificador_socio,
         analytics.hash_sha256(s.nome_socio_razao_social),
         analytics.hash_sha256(s.cpf_cnpj_socio),
         s.qualificacao_socio,
@@ -758,17 +754,8 @@ BEGIN
         s.qualificacao_representante_legal,
         s.faixa_etaria
     FROM public.socios s
-    CROSS JOIN (SELECT unnest(ARRAY['2023-05','2023-06','2023-07','2023-08','2023-09','2023-10']) AS month) m
-    WHERE EXISTS (
-        SELECT 1 FROM public.estabelecimento e
-        WHERE e.cnpj_basico = s.cnpj_basico AND e.uf = 'SP'
-          AND NOT EXISTS (
-              SELECT 1 FROM temp_changed_establishment_keys k 
-              WHERE k.cnpj_basico = e.cnpj_basico AND k.cnpj_ordem = e.cnpj_ordem AND k.cnpj_dv = e.cnpj_dv
-          )
-          AND (e.data_inicio_atividade IS NULL OR e.data_inicio_atividade <= to_char(((m.month || '-01')::DATE + INTERVAL '1 month' - INTERVAL '1 day'), 'YYYYMMDD')::integer)
-    )
-      AND (s.data_entrada_sociedade IS NULL OR s.data_entrada_sociedade <= to_char(((m.month || '-01')::DATE + INTERVAL '1 month' - INTERVAL '1 day'), 'YYYYMMDD')::integer)
+    JOIN temp_active_unchanged_sp_companies t ON t.cnpj_basico = s.cnpj_basico
+    WHERE (s.data_entrada_sociedade IS NULL OR s.data_entrada_sociedade <= to_char(((t.month || '-01')::DATE + INTERVAL '1 month' - INTERVAL '1 day'), 'YYYYMMDD')::integer)
       AND NOT EXISTS (
           SELECT 1 FROM temp_changed_company_keys k WHERE k.cnpj_basico = s.cnpj_basico
       );
@@ -830,13 +817,14 @@ BEGIN
     DROP TABLE temp_changed_simples;
     DROP TABLE temp_changed_socios;
     DROP TABLE temp_unchanged_sp_company_keys;
+    DROP TABLE temp_active_unchanged_sp_companies;
 
     RAISE INFO 'Reconstruction of monthly states completed successfully!';
 END;
 $$ LANGUAGE plpgsql;
 
 -- ==============================================================================
--- 6. LONGITUDINAL COMPRESSION FUNCTION (Step 6)
+-- 6. LONGITUDINAL COMPRESSION FUNCTION
 -- ==============================================================================
 CREATE OR REPLACE PROCEDURE analytics.compress_longitudinal_intervals() AS $$
 BEGIN
@@ -899,7 +887,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==============================================================================
--- 7. MONTHLY TRANSITIONS LOGGER (Step 7)
+-- 7. MONTHLY TRANSITIONS LOGGER
 -- ==============================================================================
 CREATE OR REPLACE PROCEDURE analytics.populate_transitions() AS $$
 DECLARE
@@ -996,7 +984,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==============================================================================
--- 8. MONTHLY SUMMARY STATISTICS VIEW (Step 10)
+-- 8. MONTHLY SUMMARY STATISTICS VIEW
 -- ==============================================================================
 CREATE OR REPLACE VIEW analytics.monthly_summary_statistics AS
 SELECT 

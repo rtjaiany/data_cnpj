@@ -1,59 +1,121 @@
-# Dados Públicos CNPJ
-- Fonte oficial da Receita Federal do Brasil, [aqui](https://dados.gov.br/dados/conjuntos-dados/cadastro-nacional-da-pessoa-juridica---cnpj).
-- Layout dos arquivos, [aqui](https://www.gov.br/receitafederal/dados/cnpj-metadados.pdf).
+# Brazilian RFB CNPJ Database: Temporal Reconstruction & Analytics Pipeline
 
-A Receita Federal do Brasil disponibiliza bases com os dados públicos do cadastro nacional de pessoas jurídicas (CNPJ).
+An enterprise-grade, relational data pipeline built on **PostgreSQL** and **Python** to ingest, parse, track, and reconstruct the historical registry states of Brazilian companies using open data releases from the Federal Revenue of Brazil (Receita Federal do Brasil - RFB).
 
-De forma geral, nelas constam as mesmas informações que conseguimos ver no cartão do CNPJ, quando fazemos uma consulta individual, acrescidas de outros dados de Simples Nacional, sócios e etc. Análises muito ricas podem sair desses dados, desde econômicas, mercadológicas até investigações.
+---
 
-Nesse repositório consta um processo de ETL para **i)** baixar os arquivos; **ii)** descompactar; **iii)** ler, tratar e **iv)** inserir num banco de dados relacional PostgreSQL.
+## 🏛️ Project Architecture & Contributions
 
----------------------
+This repository represents the collaborative evolution of a database framework designed to transform raw administrative data dumps into a reliable longitudinal panel dataset.
 
-### Infraestrutura necessária:
-- [Python 3.8](https://www.python.org/downloads/release/python-3810/)
-- [PostgreSQL 14.2](https://www.postgresql.org/download/)
-
----------------------
-
-### How to use:
-1. Com o Postgres instalado, inicie a instância do servidor (pode ser local) e crie o banco de dados conforme o arquivo `banco_de_dados.sql`.
-
-2. Crie um arquivo `.env` no diretório `code`, conforme as variáveis de ambiente do seu ambiente de trabalho (localhost). Utilize como referência o arquivo `.env_template`. Você pode também, por exemplo, renomear o arquivo de `.env_template` para apenas `.env` e então utilizá-lo:
-   - `OUTPUT_FILES_PATH`: diretório de destino para o donwload dos arquivos
-   - `EXTRACTED_FILES_PATH`: diretório de destino para a extração dos arquivos .zip
-   - `DB_USER`: usuário do banco de dados criado pelo arquivo `banco_de_dados.sql`
-   - `DB_PASSWORD`: senha do usuário do BD
-   - `DB_HOST`: host da conexão com o BD
-   - `DB_PORT`: porta da conexão com o BD
-   - `DB_NAME`: nome da base de dados na instância (`Dados_RFB` - conforme arquivo `banco_de_dados.sql`)
-
-3. Instale as bibliotecas necessárias, disponíveis em `requirements.txt`:
-```
-pip install -r requirements.txt
+```mermaid
+graph TD
+    A[Raw RFB ZIP Dumps] -->|Afonso's ETL Pipeline| B[(PostgreSQL Production DB)]
+    B -->|Afonso's Snapshots Logger| C[(public.snapshots Event Log)]
+    B & C -->|rtjaiany's Analytics Layer| D[Reconstruction Loop: Dec 2023 to May 2023]
+    D -->|rtjaiany's Gaps & Islands| E[(Longitudinal Intervals Table)]
+    D -->|rtjaiany's Transition Tracking| F[(Establishment Transitions)]
+    D -->|rtjaiany's PII Hashing| G[(Anonymized Reconstructed Data)]
 ```
 
-4. Execute o arquivo `ETL_coletar_dados_e_gravar_BD.py` e aguarde a finalização do processo.
-   - Os arquivos são grandes. Dependendo da infraestrutura isso deve levar muitas horas para conclusão.
-   - Arquivos de 08/05/2021: `4,68 GB` compactados e `17,1 GB` descompactados.
+### 🔹 1. Ingestion & ETL Foundation (Developed by Afonso - @aphonsoar)
+*   **Automated Downloader & Parser:** Scripts to download raw compressed `.zip` files from the official RFB portal, unpack them, and stream-write the records to database tables.
+*   **Database Schema Definition:** Production table layouts (`empresa`, `estabelecimento`, `socios`, `simples`, and auxiliary tables) and indexes optimized for `cnpj_basico`.
+*   **Incremental Snapshots Tracker:** A delta detection utility (`ETL_incremental_dados_RFB.py`) that compares monthly staging tables against production baselines, logging changes (`INSERT`, `UPDATE`, `DELETE`) into a centralized `public.snapshots` event ledger.
 
----------------------
+### 🔸 2. Temporal Reconstruction & Analytical Framework (Developed by @rtjaiany)
+*   **Schema `analytics` Layout:** A sandboxed analytical schema created to support reproducible panel generation for temporal and business intelligence research without modifying the core production tables.
+*   **Procedure `analytics.reconstruct_temporal_data()`:** A reverse-chronological batch engine that starts from the June 2026 database baseline and steps backward through months (`2023-12` down to `2023-05`), applying the delta events in `snapshots` to reconstruct correct historical states.
+*   **PII Hashing & Security:** Integration of secure `SHA-256` hashing functions to anonymize names, CPFs, and contact details in compliance with Brazilian General Data Protection Law (LGPD).
+*   **Gaps & Islands Compression:** A state-reduction routine (`analytics.compress_longitudinal_intervals`) that compresses hundreds of millions of redundant monthly records into a compact event-history format containing active validity intervals (`valid_from_month` to `valid_to_month`).
+*   **Transition Trackers:** Database procedures to output detailed mutation audits for key variables (CNAE, municipality, status, Simples/MEI status).
 
-### Tabelas geradas:
-- Para maiores informações, consulte o [layout](https://www.gov.br/receitafederal/pt-br/assuntos/orientacao-tributaria/cadastros/consultas/arquivos/NOVOLAYOUTDOSDADOSABERTOSDOCNPJ.pdf).
-  - `empresa`: dados cadastrais da empresa em nível de matriz
-  - `estabelecimento`: dados analíticos da empresa por unidade / estabelecimento (telefones, endereço, filial, etc)
-  - `socios`: dados cadastrais dos sócios das empresas
-  - `simples`: dados de MEI e Simples Nacional
-  - `cnae`: código e descrição dos CNAEs
-  - `quals`: tabela de qualificação das pessoas físicas - sócios, responsável e representante legal.
-  - `natju`: tabela de naturezas jurídicas - código e descrição.
-  - `moti`: tabela de motivos da situação cadastral - código e descrição.
-  - `pais`: tabela de países - código e descrição.
-  - `munic`: tabela de municípios - código e descrição.
+---
 
+## 📂 Repository Structure
 
-- Pelo volume de dados, as tabelas  `empresa`, `estabelecimento`, `socios` e `simples` possuem índices para a coluna `cnpj_basico`, que é a principal chave de ligação entre elas.
+```
+├── code/
+│   ├── ETL_coletar_dados_e_gravar_BD.py  # [Afonso] Ingests full RFB dumps
+│   ├── ETL_incremental_dados_RFB.py     # [Afonso] Incremental snapshot logger
+│   ├── banco_de_dados.sql               # [Afonso] Production schema definition
+│   ├── reconstruct_analytics.sql        # [rtjaiany] Reconstruction & Analytics SQL layer
+│   └── export_csv.py                    # [rtjaiany] Pipeline export pipeline to CSV
+├── Dados_RFB_ERD.png                    # Entity-Relationship Diagram (ERD)
+├── requirements.txt                     # Python dependency list
+└── README.md                            # Documentation
+```
 
-### Modelo de Entidade Relacionamento:
-![alt text](https://github.com/aphonsoar/Receita_Federal_do_Brasil_-_Dados_Publicos_CNPJ/blob/master/Dados_RFB_ERD.png)
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+*   Python 3.8+
+*   PostgreSQL 14.2+ (with `pgcrypto` extension for SHA-256 hashing)
+
+### 1. Database Setup & Ingestion (Afonso's Layer)
+1. Initialize the PostgreSQL schema:
+   ```bash
+   psql -h localhost -U postgres -d cnpj -f code/banco_de_dados.sql
+   ```
+2. Set up environment variables in `code/.env` matching the template:
+   ```env
+   DB_HOST=localhost
+   DB_PORT=5432
+   DB_USER=postgres
+   DB_PASSWORD=your_password
+   DB_NAME=cnpj
+   OUTPUT_FILES_PATH=/path/to/downloads
+   EXTRACTED_FILES_PATH=/path/to/extracted
+   ```
+3. Install dependencies and run the core ETL:
+   ```bash
+   pip install -r requirements.txt
+   python code/ETL_coletar_dados_e_gravar_BD.py
+   ```
+
+### 2. Historical Reconstruction & Analytics (rtjaiany's Layer)
+1. Compile the analytical procedures in your database:
+   ```bash
+   psql -h localhost -U postgres -d cnpj -f code/reconstruct_analytics.sql
+   ```
+2. Execute the reconstruction process:
+   ```bash
+   psql -h localhost -U postgres -d cnpj -c "CALL analytics.reconstruct_temporal_data();"
+   ```
+   *This will run the reverse chronological loop, resolve transition tables, apply PII hashes, and construct the Gaps & Islands longitudinal compression.*
+3. Execute the Gaps & Islands compression:
+   ```bash
+   psql -h localhost -U postgres -d cnpj -c "CALL analytics.compress_longitudinal_intervals();"
+   ```
+
+---
+
+## 📊 Reconstructed Analytics Schema Dictionary
+
+Our reconstruction process produces five highly optimized targets in the `analytics` schema:
+
+1.  `analytics.reconstructed_establishments`: Historical month-by-month SP establishment cohorts.
+2.  `analytics.reconstructed_companies`: Company metadata matching the establishment panels.
+3.  `analytics.reconstructed_simples`: Historical MEI and Simples Nacional enrollment records.
+4.  `analytics.reconstructed_partner_summaries`: Monthly aggregate statistics of board members per company (age spreads, entry/exit deltas).
+5.  `analytics.longitudinal_establishment_intervals`: Invariant interval representation compressing the dataset to save disk space and accelerate longitudinal analytical models.
+
+---
+
+## 🔐 Privacy & Anonymization
+
+To protect personally identifiable information (PII) of business owners and representatives, the analytics procedure processes all names, CPFs, and representatives using PG's crypto extensions:
+
+$$\text{hashed\_field} = \text{SHA256}(\text{UTF-8}(\text{value}))$$
+
+This preserves relationships and entity linkages across months while ensuring complete privacy and anonymization.
+
+---
+
+## 📈 Entity-Relationship Diagram
+
+Refer to the database entity relationships depicted below:
+
+![Entity-Relationship Diagram](docs/Dados_RFB_ERD.png)
