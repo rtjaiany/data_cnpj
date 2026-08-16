@@ -1,22 +1,124 @@
--- Conectar no banco de dados "cnpj"
-\c cnpj
-
--- Tabela para rastrear alterações (snapshots) de dados ao longo do tempo
-CREATE TABLE IF NOT EXISTS snapshots (
+-- Table for tracking processed snapshots metadata
+CREATE TABLE IF NOT EXISTS snapshots_metadata (
     id SERIAL PRIMARY KEY,
-    tabela VARCHAR(50) NOT NULL,                -- Nome da tabela (empresa, estabelecimento, etc.)
-    cnpj_basico VARCHAR(8) NOT NULL,            -- CNPJ Básico associado à alteração
-    cnpj_ordem VARCHAR(4),                      -- CNPJ Ordem (apenas estabelecimento)
-    cnpj_dv VARCHAR(2),                         -- CNPJ DV (apenas estabelecimento)
-    chave JSONB NOT NULL,                       -- Chave primária como objeto JSON
-    conteudo_anterior JSONB,                    -- Dados antigos (NULL para INSERT)
-    conteudo_novo JSONB,                        -- Dados novos (NULL para DELETE)
-    tipo_alteracao VARCHAR(10) NOT NULL,        -- 'INSERT', 'UPDATE', 'DELETE'
-    mes_referencia VARCHAR(20) NOT NULL,        -- Mês do snapshot (ex: '2026-06')
+    reference_month DATE UNIQUE NOT NULL,          -- Canonically represent first day of month (e.g. 2023-06-01)
+    collection_date TIMESTAMP NOT NULL,             -- The actual timestamp of collection
+    status VARCHAR(20) NOT NULL,                   -- 'SUCCESS' or 'FAILED'
+    duration_seconds INTEGER,
+    num_inserts INTEGER DEFAULT 0,
+    num_updates INTEGER DEFAULT 0,
+    num_deletes INTEGER DEFAULT 0,
+    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table for tracking individual processed file checkpoints for the current month
+CREATE TABLE IF NOT EXISTS processed_files (
+    file_path VARCHAR(255) PRIMARY KEY,            -- Key format: 'YYYY-MM/filename.zip'
+    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table for tracking historical change events (snapshots)
+CREATE TABLE IF NOT EXISTS snapshots (
+    id BIGSERIAL PRIMARY KEY,
+    tabela VARCHAR(50) NOT NULL,                   -- 'empresa', 'estabelecimento', 'socios', 'simples'
+    cnpj_basico VARCHAR(8) NOT NULL,
+    cnpj_ordem VARCHAR(4),                         -- Only for estabelecimento
+    cnpj_dv VARCHAR(2),                            -- Only for estabelecimento
+    chave JSONB NOT NULL,                          -- Unique business key as JSON
+    conteudo_anterior JSONB,                       -- Old row state (NULL for INSERT)
+    conteudo_novo JSONB,                           -- New row state (NULL for DELETE)
+    tipo_alteracao VARCHAR(10) NOT NULL,           -- 'INSERT', 'UPDATE', 'DELETE'
+    mes_referencia DATE NOT NULL,                  -- Reference month canonical date
+    data_coleta TIMESTAMP NOT NULL,                -- Original collection date/time
     data_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Índices para otimizar pesquisas
+-- Indexes to optimize snapshot operations
 CREATE INDEX IF NOT EXISTS snapshots_tabela_mes ON snapshots(tabela, mes_referencia);
 CREATE INDEX IF NOT EXISTS snapshots_cnpj_busca ON snapshots(cnpj_basico, cnpj_ordem, cnpj_dv);
 CREATE INDEX IF NOT EXISTS snapshots_chave ON snapshots USING gin (chave);
+
+-- Table for latest state of changed empresas
+CREATE TABLE IF NOT EXISTS latest_state_empresa (
+    cnpj_basico VARCHAR(8) PRIMARY KEY,
+    razao_social TEXT,
+    natureza_juridica INTEGER,
+    qualificacao_responsavel INTEGER,
+    capital_social DOUBLE PRECISION,
+    porte_empresa INTEGER,
+    ente_federativo_responsavel TEXT,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    last_updated_month DATE NOT NULL,
+    data_coleta TIMESTAMP NOT NULL
+);
+
+-- Table for latest state of changed estabelecimentos
+CREATE TABLE IF NOT EXISTS latest_state_estabelecimento (
+    cnpj_basico VARCHAR(8) NOT NULL,
+    cnpj_ordem VARCHAR(4) NOT NULL,
+    cnpj_dv VARCHAR(2) NOT NULL,
+    identificador_matriz_filial INTEGER,
+    nome_fantasia TEXT,
+    situacao_cadastral INTEGER,
+    data_situacao_cadastral INTEGER,
+    motivo_situacao_cadastral INTEGER,
+    nome_cidade_exterior TEXT,
+    pais TEXT,
+    data_inicio_atividade INTEGER,
+    cnae_fiscal_principal INTEGER,
+    cnae_fiscal_secundaria TEXT,
+    tipo_logradouro TEXT,
+    logradouro TEXT,
+    numero TEXT,
+    complemento TEXT,
+    bairro TEXT,
+    cep TEXT,
+    uf TEXT,
+    municipio INTEGER,
+    ddd_1 TEXT,
+    telefone_1 TEXT,
+    ddd_2 TEXT,
+    telefone_2 TEXT,
+    ddd_fax TEXT,
+    fax TEXT,
+    correio_eletronico TEXT,
+    situacao_especial TEXT,
+    data_situacao_especial INTEGER,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    last_updated_month DATE NOT NULL,
+    data_coleta TIMESTAMP NOT NULL,
+    PRIMARY KEY (cnpj_basico, cnpj_ordem, cnpj_dv)
+);
+
+-- Table for latest state of changed socios
+CREATE TABLE IF NOT EXISTS latest_state_socios (
+    cnpj_basico VARCHAR(8) NOT NULL,
+    nome_socio_razao_social TEXT NOT NULL,
+    identificador_socio INTEGER,
+    cpf_cnpj_socio TEXT,
+    qualificacao_socio INTEGER,
+    data_entrada_sociedade INTEGER,
+    pais TEXT,
+    representante_legal TEXT,
+    nome_do_representante TEXT,
+    qualificacao_representante_legal INTEGER,
+    faixa_etaria INTEGER,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    last_updated_month DATE NOT NULL,
+    data_coleta TIMESTAMP NOT NULL,
+    PRIMARY KEY (cnpj_basico, nome_socio_razao_social)
+);
+
+-- Table for latest state of changed simples
+CREATE TABLE IF NOT EXISTS latest_state_simples (
+    cnpj_basico VARCHAR(8) PRIMARY KEY,
+    opcao_pelo_simples TEXT,
+    data_opcao_simples INTEGER,
+    data_exclusao_simples INTEGER,
+    opcao_mei TEXT,
+    data_opcao_mei INTEGER,
+    data_exclusao_mei INTEGER,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    last_updated_month DATE NOT NULL,
+    data_coleta TIMESTAMP NOT NULL
+);
