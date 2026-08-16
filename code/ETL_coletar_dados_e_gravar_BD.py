@@ -22,35 +22,36 @@ from io import StringIO
 
 
 def check_diff(url, file_name, token):
-    '''
+    """
     Verifica se o arquivo no servidor existe no disco e se ele tem o mesmo
     tamanho no servidor.
-    '''
+    """
     if not os.path.isfile(file_name):
-        return True # ainda nao foi baixado
+        return True  # ainda nao foi baixado
 
     headers = {
         "X-Requested-With": "XMLHttpRequest",
     }
     response = requests.head(url, auth=(token, ""), headers=headers)
-    new_size = int(response.headers.get('content-length', 0))
+    new_size = int(response.headers.get("content-length", 0))
     old_size = os.path.getsize(file_name)
     if new_size != old_size:
         os.remove(file_name)
-        return True # tamanho diferentes
+        return True  # tamanho diferentes
 
-    return False # arquivos sao iguais
+    return False  # arquivos sao iguais
 
 
-#%%
+# %%
 def makedirs(path):
-    '''
+    """
     cria path caso seja necessario
-    '''
+    """
     if not os.path.exists(path):
         os.makedirs(path)
 
-#%%
+
+# %%
 def psql_insert_copy(table, conn, keys, data_iter):
     """
     Execute SQL statement inserting data using PostgreSQL COPY
@@ -61,26 +62,27 @@ def psql_insert_copy(table, conn, keys, data_iter):
         writer = csv.writer(s_buf)
         writer.writerows(data_iter)
         s_buf.seek(0)
-        
-        columns = ', '.join(['"{}"'.format(k) for k in keys])
+
+        columns = ", ".join(['"{}"'.format(k) for k in keys])
         if table.schema:
-            table_name = '{}.{}'.format(table.schema, table.name)
+            table_name = "{}.{}".format(table.schema, table.name)
         else:
             table_name = table.name
-            
-        sql = 'COPY {} ({}) FROM STDIN WITH CSV'.format(table_name, columns)
+
+        sql = "COPY {} ({}) FROM STDIN WITH CSV".format(table_name, columns)
         cur.copy_expert(sql=sql, file=s_buf)
 
+
 def to_sql(dataframe, **kwargs):
-    '''
+    """
     Quebra em pedacos a tarefa de inserir registros no banco usando COPY
-    '''
+    """
     size = 100000  # Aumentado para melhor performance com COPY
     total = len(dataframe)
-    name = kwargs.get('name')
+    name = kwargs.get("name")
 
     def chunker(df):
-        return (df[i:i + size] for i in range(0, len(df), size))
+        return (df[i : i + size] for i in range(0, len(df), size))
 
     for i, df in enumerate(chunker(dataframe)):
         df.to_sql(method=psql_insert_copy, **kwargs)
@@ -88,22 +90,23 @@ def to_sql(dataframe, **kwargs):
         if index > total:
             index = total
         percent = (index * 100) / total
-        progress = f'{name} {percent:.2f}% {index:0{len(str(total))}}/{total}'
-        sys.stdout.write(f'\r{progress}')
-    sys.stdout.write('\n')
+        progress = f"{name} {percent:.2f}% {index:0{len(str(total))}}/{total}"
+        sys.stdout.write(f"\r{progress}")
+    sys.stdout.write("\n")
 
-#%%
+
+# %%
 # Ler arquivo de configuração de ambiente # https://dev.to/jakewitcher/using-env-files-for-environment-variables-in-python-applications-55a1
 def getEnv(env):
     return os.getenv(env)
 
 
 current_path = pathlib.Path().resolve()
-dotenv_path = os.path.join(current_path, '.env')
+dotenv_path = os.path.join(current_path, ".env")
 if not os.path.isfile(dotenv_path):
     # Try directory of the script
     script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    dotenv_path = os.path.join(script_dir, '.env')
+    dotenv_path = os.path.join(script_dir, ".env")
 if not os.path.isfile(dotenv_path):
     print("Arquivo .env não encontrado!")
     sys.exit(1)
@@ -111,40 +114,47 @@ print("Using .env file at:", dotenv_path)
 load_dotenv(dotenv_path=dotenv_path)
 
 
-dados_rf = 'http://200.152.38.155/CNPJ/'
+dados_rf = "http://200.152.38.155/CNPJ/"
 
-#%%
+# %%
 # Read details from ".env" file:
 output_files = None
 extracted_files = None
 try:
-    output_files = getEnv('OUTPUT_FILES_PATH')
+    output_files = getEnv("OUTPUT_FILES_PATH")
     makedirs(output_files)
 
-    extracted_files = getEnv('EXTRACTED_FILES_PATH')
+    extracted_files = getEnv("EXTRACTED_FILES_PATH")
     makedirs(extracted_files)
 
-    print('Diretórios definidos: \n' +
-          'output_files: ' + str(output_files)  + '\n' +
-          'extracted_files: ' + str(extracted_files))
+    print(
+        "Diretórios definidos: \n"
+        + "output_files: "
+        + str(output_files)
+        + "\n"
+        + "extracted_files: "
+        + str(extracted_files)
+    )
 except:
     pass
-    print('Erro na definição dos diretórios, verifique o arquivo ".env" ou o local informado do seu arquivo de configuração')
+    print(
+        'Erro na definição dos diretórios, verifique o arquivo ".env" ou o local informado do seu arquivo de configuração'
+    )
 
 # WebDAV / Nextcloud integration
-share_url = getEnv('NEXTCLOUD_SHARE_URL') or 'https://arquivos.receitafederal.gov.br/index.php/s/YggdBLfdninEJX9'
-data_folder = getEnv('NEXTCLOUD_FOLDER') or '2026-06'
+share_url = (
+    getEnv("NEXTCLOUD_SHARE_URL")
+    or "https://arquivos.receitafederal.gov.br/index.php/s/YggdBLfdninEJX9"
+)
+data_folder = getEnv("NEXTCLOUD_FOLDER") or "2023-05"
 
 # Extract token from share_url
-token = share_url.rstrip('/').split('/')[-1]
+token = share_url.rstrip("/").split("/")[-1]
 webdav_base = "https://arquivos.receitafederal.gov.br/public.php/webdav/"
 webdav_url = f"{webdav_base}{data_folder}/"
 
 print(f"Buscando arquivos no WebDAV Nextcloud: {webdav_url}")
-headers = {
-    "X-Requested-With": "XMLHttpRequest",
-    "Depth": "1"
-}
+headers = {"X-Requested-With": "XMLHttpRequest", "Depth": "1"}
 response = requests.request("PROPFIND", webdav_url, auth=(token, ""), headers=headers)
 response.raise_for_status()
 
@@ -155,18 +165,18 @@ for resp in root.findall(".//d:response", ns):
     href = resp.find("d:href", ns)
     if href is not None:
         path = href.text
-        if path.endswith('.zip'):
+        if path.endswith(".zip"):
             filename = os.path.basename(path)
             Files.append(filename)
 
 Files.sort()
 
 
-print('Arquivos que serão baixados:')
+print("Arquivos que serão baixados:")
 i_f = 0
 for f in Files:
     i_f += 1
-    print(str(i_f) + ' - ' + f)
+    print(str(i_f) + " - " + f)
 
 # Download arquivos ################################################################################################################################
 i_l = 0
@@ -174,56 +184,83 @@ for l in Files:
     i_l += 1
     url = f"{webdav_url}{l}"
     file_name = os.path.join(output_files, l)
-    print(f'Processando arquivo ({i_l}/{len(Files)}): {l}')
+    print(f"Processando arquivo ({i_l}/{len(Files)}): {l}")
     if check_diff(url, file_name, token):
-        print(f"Iniciando download de {url}")
-        headers = {
-            "X-Requested-With": "XMLHttpRequest",
-        }
-        with requests.get(url, auth=(token, ""), headers=headers, stream=True) as r:
-            r.raise_for_status()
-            total_size = int(r.headers.get('content-length', 0))
-            block_size = 1024 * 1024  # 1 MB
-            downloaded = 0
-            with open(file_name, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=block_size):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if total_size > 0:
-                            percent = (downloaded / total_size) * 100
-                            sys.stdout.write(f"\rProgresso: {percent:.2f}% [{downloaded / (1024*1024):.1f}MB / {total_size / (1024*1024):.1f}MB]")
-                        else:
-                            sys.stdout.write(f"\rProgresso: {downloaded / (1024*1024):.1f}MB")
-                        sys.stdout.flush()
-            sys.stdout.write("\n")
+        max_retries = 5
+        for attempt in range(1, max_retries + 1):
+            try:
+                if os.path.isfile(file_name):
+                    try:
+                        os.remove(file_name)
+                    except:
+                        pass
+                print(f"Iniciando download de {url} (Tentativa {attempt}/{max_retries})")
+                headers = {
+                    "X-Requested-With": "XMLHttpRequest",
+                }
+                with requests.get(url, auth=(token, ""), headers=headers, stream=True) as r:
+                    r.raise_for_status()
+                    total_size = int(r.headers.get("content-length", 0))
+                    block_size = 1024 * 1024  # 1 MB
+                    downloaded = 0
+                    with open(file_name, "wb") as f:
+                        for chunk in r.iter_content(chunk_size=block_size):
+                            if chunk:
+                                f.write(chunk)
+                                downloaded += len(chunk)
+                                if total_size > 0:
+                                    percent = (downloaded / total_size) * 100
+                                    sys.stdout.write(
+                                        f"\rProgresso: {percent:.2f}% [{downloaded / (1024*1024):.1f}MB / {total_size / (1024*1024):.1f}MB]"
+                                    )
+                                else:
+                                    sys.stdout.write(
+                                        f"\rProgresso: {downloaded / (1024*1024):.1f}MB"
+                                    )
+                                sys.stdout.flush()
+                    sys.stdout.write("\n")
+                if total_size > 0 and os.path.getsize(file_name) != total_size:
+                    raise Exception(f"Tamanho do arquivo baixado ({os.path.getsize(file_name)}) difere do esperado ({total_size})")
+                break
+            except Exception as e:
+                print(f"\nErro no download na tentativa {attempt}: {e}")
+                if os.path.isfile(file_name):
+                    try:
+                        os.remove(file_name)
+                    except:
+                        pass
+                if attempt == max_retries:
+                    print("Número máximo de tentativas atingido. Interrompendo a coleta.")
+                    raise e
+                print("Aguardando 10 segundos antes de tentar novamente...")
+                time.sleep(10)
     else:
         print(f"Arquivo {l} já está atualizado no disco local.")
 
 ####################################################################################################################################################
 
-#%%
+# %%
 # Extracting files:
 i_l = 0
 for l in Files:
     try:
         i_l += 1
-        print('Descompactando arquivo:')
-        print(str(i_l) + ' - ' + l)
+        print("Descompactando arquivo:")
+        print(str(i_l) + " - " + l)
         full_path = os.path.join(output_files, l)
-        with zipfile.ZipFile(full_path, 'r') as zip_ref:
+        with zipfile.ZipFile(full_path, "r") as zip_ref:
             zip_ref.extractall(extracted_files)
     except:
         pass
 
-#%%
+# %%
 ########################################################################################################################
 ## LER E INSERIR DADOS #################################################################################################
 ########################################################################################################################
 insert_start = time.time()
 
 # Files:
-Items = [name for name in os.listdir(extracted_files) if name.endswith('')]
+Items = [name for name in os.listdir(extracted_files) if name.endswith("")]
 
 # Separar arquivos:
 arquivos_empresa = []
@@ -237,117 +274,160 @@ arquivos_natju = []
 arquivos_pais = []
 arquivos_quals = []
 for i in range(len(Items)):
-    if Items[i].find('EMPRE') > -1:
+    if Items[i].find("EMPRE") > -1:
         arquivos_empresa.append(Items[i])
-    elif Items[i].find('ESTABELE') > -1:
+    elif Items[i].find("ESTABELE") > -1:
         arquivos_estabelecimento.append(Items[i])
-    elif Items[i].find('SOCIO') > -1:
+    elif Items[i].find("SOCIO") > -1:
         arquivos_socios.append(Items[i])
-    elif Items[i].find('SIMPLES') > -1:
+    elif Items[i].find("SIMPLES") > -1:
         arquivos_simples.append(Items[i])
-    elif Items[i].find('CNAE') > -1:
+    elif Items[i].find("CNAE") > -1:
         arquivos_cnae.append(Items[i])
-    elif Items[i].find('MOTI') > -1:
+    elif Items[i].find("MOTI") > -1:
         arquivos_moti.append(Items[i])
-    elif Items[i].find('MUNIC') > -1:
+    elif Items[i].find("MUNIC") > -1:
         arquivos_munic.append(Items[i])
-    elif Items[i].find('NATJU') > -1:
+    elif Items[i].find("NATJU") > -1:
         arquivos_natju.append(Items[i])
-    elif Items[i].find('PAIS') > -1:
+    elif Items[i].find("PAIS") > -1:
         arquivos_pais.append(Items[i])
-    elif Items[i].find('QUALS') > -1:
+    elif Items[i].find("QUALS") > -1:
         arquivos_quals.append(Items[i])
     else:
         pass
 
-#%%
+# %%
 # Conectar no banco de dados:
 # Dados da conexão com o BD
-user=getEnv('DB_USER')
-passw=getEnv('DB_PASSWORD')
-host=getEnv('DB_HOST')
-port=getEnv('DB_PORT')
-database=getEnv('DB_NAME')
+user = getEnv("DB_USER")
+passw = getEnv("DB_PASSWORD")
+host = getEnv("DB_HOST")
+port = getEnv("DB_PORT")
+database = getEnv("DB_NAME")
 
 # Conectar:
-engine = create_engine('postgresql://'+user+':'+passw+'@'+host+':'+port+'/'+database)
-conn = psycopg2.connect('dbname='+database+' '+'user='+user+' '+'host='+host+' '+'port='+port+' '+'password='+passw)
+engine = create_engine(
+    "postgresql://" + user + ":" + passw + "@" + host + ":" + port + "/" + database
+)
+conn = psycopg2.connect(
+    "dbname="
+    + database
+    + " "
+    + "user="
+    + user
+    + " "
+    + "host="
+    + host
+    + " "
+    + "port="
+    + port
+    + " "
+    + "password="
+    + passw
+)
 cur = conn.cursor()
 
 # #%%
 # # Arquivos de empresa:
 empresa_insert_start = time.time()
-print("""
+print(
+    """
 #######################
 ## Arquivos de EMPRESA:
 #######################
-""")
+"""
+)
 
 # Drop table antes do insert
 cur.execute('DROP TABLE IF EXISTS "empresa";')
 conn.commit()
 
 for e in range(0, len(arquivos_empresa)):
-    print('Trabalhando no arquivo: '+arquivos_empresa[e]+' [...]')
+    print("Trabalhando no arquivo: " + arquivos_empresa[e] + " [...]")
     try:
         del empresa
     except:
         pass
 
-    #empresa = pd.DataFrame(columns=[0, 1, 2, 3, 4, 5, 6])
-    empresa_dtypes = {0: object, 1: object, 2: 'Int32', 3: 'Int32', 4: object, 5: 'Int32', 6: object}
+    # empresa = pd.DataFrame(columns=[0, 1, 2, 3, 4, 5, 6])
+    empresa_dtypes = {
+        0: object,
+        1: object,
+        2: "Int32",
+        3: "Int32",
+        4: object,
+        5: "Int32",
+        6: object,
+    }
     extracted_file_path = os.path.join(extracted_files, arquivos_empresa[e])
 
-    empresa = pd.read_csv(filepath_or_buffer=extracted_file_path,
-                          sep=';',
-                          #nrows=100,
-                          skiprows=0,
-                          header=None,
-                          dtype=empresa_dtypes,
-                          encoding='latin-1',
+    empresa = pd.read_csv(
+        filepath_or_buffer=extracted_file_path,
+        sep=";",
+        # nrows=100,
+        skiprows=0,
+        header=None,
+        dtype=empresa_dtypes,
+        encoding="latin-1",
     )
 
     # Tratamento do arquivo antes de inserir na base:
     empresa = empresa.reset_index()
-    del empresa['index']
+    del empresa["index"]
 
     # Renomear colunas
-    empresa.columns = ['cnpj_basico', 'razao_social', 'natureza_juridica', 'qualificacao_responsavel', 'capital_social', 'porte_empresa', 'ente_federativo_responsavel']
+    empresa.columns = [
+        "cnpj_basico",
+        "razao_social",
+        "natureza_juridica",
+        "qualificacao_responsavel",
+        "capital_social",
+        "porte_empresa",
+        "ente_federativo_responsavel",
+    ]
 
     # Replace "," por "."
-    empresa['capital_social'] = empresa['capital_social'].apply(lambda x: x.replace(',','.'))
-    empresa['capital_social'] = empresa['capital_social'].astype(float)
+    empresa["capital_social"] = empresa["capital_social"].apply(
+        lambda x: x.replace(",", ".")
+    )
+    empresa["capital_social"] = empresa["capital_social"].astype(float)
 
     # Gravar dados no banco:
     # Empresa
-    to_sql(empresa, name='empresa', con=engine, if_exists='append', index=False)
-    print('Arquivo ' + arquivos_empresa[e] + ' inserido com sucesso no banco de dados!')
+    to_sql(empresa, name="empresa", con=engine, if_exists="append", index=False)
+    print("Arquivo " + arquivos_empresa[e] + " inserido com sucesso no banco de dados!")
 
 try:
     del empresa
 except:
     pass
-print('Arquivos de empresa finalizados!')
+print("Arquivos de empresa finalizados!")
 empresa_insert_end = time.time()
 empresa_Tempo_insert = round((empresa_insert_end - empresa_insert_start))
-print('Tempo de execução do processo de empresa (em segundos): ' + str(empresa_Tempo_insert))
+print(
+    "Tempo de execução do processo de empresa (em segundos): "
+    + str(empresa_Tempo_insert)
+)
 
-#%%
+# %%
 # Arquivos de estabelecimento:
 estabelecimento_insert_start = time.time()
-print("""
+print(
+    """
 ###############################
 ## Arquivos de ESTABELECIMENTO:
 ###############################
-""")
+"""
+)
 
 # Drop table antes do insert
 cur.execute('DROP TABLE IF EXISTS "estabelecimento";')
 conn.commit()
 
-print('Tem %i arquivos de estabelecimento!' % len(arquivos_estabelecimento))
+print("Tem %i arquivos de estabelecimento!" % len(arquivos_estabelecimento))
 for e in range(0, len(arquivos_estabelecimento)):
-    print('Trabalhando no arquivo: '+arquivos_estabelecimento[e]+' [...]')
+    print("Trabalhando no arquivo: " + arquivos_estabelecimento[e] + " [...]")
     try:
         del estabelecimento
         gc.collect()
@@ -355,66 +435,108 @@ for e in range(0, len(arquivos_estabelecimento)):
         pass
 
     # estabelecimento = pd.DataFrame(columns=[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28])
-    estabelecimento_dtypes = {0: object, 1: object, 2: object, 3: 'Int32', 4: object, 5: 'Int32', 6: 'Int32',
-                              7: 'Int32', 8: object, 9: object, 10: 'Int32', 11: 'Int32', 12: object, 13: object,
-                              14: object, 15: object, 16: object, 17: object, 18: object, 19: object,
-                              20: 'Int32', 21: object, 22: object, 23: object, 24: object, 25: object,
-                              26: object, 27: object, 28: object, 29: 'Int32'}
+    estabelecimento_dtypes = {
+        0: object,
+        1: object,
+        2: object,
+        3: "Int32",
+        4: object,
+        5: "Int32",
+        6: "Int32",
+        7: "Int32",
+        8: object,
+        9: object,
+        10: "Int32",
+        11: "Int32",
+        12: object,
+        13: object,
+        14: object,
+        15: object,
+        16: object,
+        17: object,
+        18: object,
+        19: object,
+        20: "Int32",
+        21: object,
+        22: object,
+        23: object,
+        24: object,
+        25: object,
+        26: object,
+        27: object,
+        28: object,
+        29: "Int32",
+    }
     extracted_file_path = os.path.join(extracted_files, arquivos_estabelecimento[e])
 
     NROWS = 2000000
     part = 0
     while True:
-        estabelecimento = pd.read_csv(filepath_or_buffer=extracted_file_path,
-                              sep=';',
-                              nrows=NROWS,
-                              skiprows=NROWS * part,
-                              header=None,
-                              dtype=estabelecimento_dtypes,
-                              encoding='latin-1',
+        estabelecimento = pd.read_csv(
+            filepath_or_buffer=extracted_file_path,
+            sep=";",
+            nrows=NROWS,
+            skiprows=NROWS * part,
+            header=None,
+            dtype=estabelecimento_dtypes,
+            encoding="latin-1",
         )
 
         # Tratamento do arquivo antes de inserir na base:
         estabelecimento = estabelecimento.reset_index()
-        del estabelecimento['index']
+        del estabelecimento["index"]
         gc.collect()
 
         # Renomear colunas
-        estabelecimento.columns = ['cnpj_basico',
-                                   'cnpj_ordem',
-                                   'cnpj_dv',
-                                   'identificador_matriz_filial',
-                                   'nome_fantasia',
-                                   'situacao_cadastral',
-                                   'data_situacao_cadastral',
-                                   'motivo_situacao_cadastral',
-                                   'nome_cidade_exterior',
-                                   'pais',
-                                   'data_inicio_atividade',
-                                   'cnae_fiscal_principal',
-                                   'cnae_fiscal_secundaria',
-                                   'tipo_logradouro',
-                                   'logradouro',
-                                   'numero',
-                                   'complemento',
-                                   'bairro',
-                                   'cep',
-                                   'uf',
-                                   'municipio',
-                                   'ddd_1',
-                                   'telefone_1',
-                                   'ddd_2',
-                                   'telefone_2',
-                                   'ddd_fax',
-                                   'fax',
-                                   'correio_eletronico',
-                                   'situacao_especial',
-                                   'data_situacao_especial']
+        estabelecimento.columns = [
+            "cnpj_basico",
+            "cnpj_ordem",
+            "cnpj_dv",
+            "identificador_matriz_filial",
+            "nome_fantasia",
+            "situacao_cadastral",
+            "data_situacao_cadastral",
+            "motivo_situacao_cadastral",
+            "nome_cidade_exterior",
+            "pais",
+            "data_inicio_atividade",
+            "cnae_fiscal_principal",
+            "cnae_fiscal_secundaria",
+            "tipo_logradouro",
+            "logradouro",
+            "numero",
+            "complemento",
+            "bairro",
+            "cep",
+            "uf",
+            "municipio",
+            "ddd_1",
+            "telefone_1",
+            "ddd_2",
+            "telefone_2",
+            "ddd_fax",
+            "fax",
+            "correio_eletronico",
+            "situacao_especial",
+            "data_situacao_especial",
+        ]
 
         # Gravar dados no banco:
         # estabelecimento
-        to_sql(estabelecimento, name='estabelecimento', con=engine, if_exists='append', index=False)
-        print('Arquivo ' + arquivos_estabelecimento[e] + ' / ' + str(part) + ' inserido com sucesso no banco de dados!')
+        to_sql(
+            estabelecimento,
+            name="estabelecimento",
+            con=engine,
+            if_exists="append",
+            index=False,
+        )
+        print(
+            "Arquivo "
+            + arquivos_estabelecimento[e]
+            + " / "
+            + str(part)
+            + " inserido com sucesso no banco de dados!"
+        )
         if len(estabelecimento) == NROWS:
             part += 1
         else:
@@ -424,141 +546,191 @@ try:
     del estabelecimento
 except:
     pass
-print('Arquivos de estabelecimento finalizados!')
+print("Arquivos de estabelecimento finalizados!")
 estabelecimento_insert_end = time.time()
-estabelecimento_Tempo_insert = round((estabelecimento_insert_end - estabelecimento_insert_start))
-print('Tempo de execução do processo de estabelecimento (em segundos): ' + str(estabelecimento_Tempo_insert))
+estabelecimento_Tempo_insert = round(
+    (estabelecimento_insert_end - estabelecimento_insert_start)
+)
+print(
+    "Tempo de execução do processo de estabelecimento (em segundos): "
+    + str(estabelecimento_Tempo_insert)
+)
 
-#%%
+# %%
 # Arquivos de socios:
 socios_insert_start = time.time()
-print("""
+print(
+    """
 ######################
 ## Arquivos de SOCIOS:
 ######################
-""")
+"""
+)
 
 # Drop table antes do insert
 cur.execute('DROP TABLE IF EXISTS "socios";')
 conn.commit()
 
 for e in range(0, len(arquivos_socios)):
-    print('Trabalhando no arquivo: '+arquivos_socios[e]+' [...]')
+    print("Trabalhando no arquivo: " + arquivos_socios[e] + " [...]")
     try:
         del socios
     except:
         pass
 
-    socios_dtypes = {0: object, 1: 'Int32', 2: object, 3: object, 4: 'Int32', 5: 'Int32', 6: 'Int32',
-                     7: object, 8: object, 9: 'Int32', 10: 'Int32'}
+    socios_dtypes = {
+        0: object,
+        1: "Int32",
+        2: object,
+        3: object,
+        4: "Int32",
+        5: "Int32",
+        6: "Int32",
+        7: object,
+        8: object,
+        9: "Int32",
+        10: "Int32",
+    }
     extracted_file_path = os.path.join(extracted_files, arquivos_socios[e])
-    socios = pd.read_csv(filepath_or_buffer=extracted_file_path,
-                          sep=';',
-                          #nrows=100,
-                          skiprows=0,
-                          header=None,
-                          dtype=socios_dtypes,
-                          encoding='latin-1',
+    socios = pd.read_csv(
+        filepath_or_buffer=extracted_file_path,
+        sep=";",
+        # nrows=100,
+        skiprows=0,
+        header=None,
+        dtype=socios_dtypes,
+        encoding="latin-1",
     )
 
     # Tratamento do arquivo antes de inserir na base:
     socios = socios.reset_index()
-    del socios['index']
+    del socios["index"]
 
     # Renomear colunas
-    socios.columns = ['cnpj_basico',
-                      'identificador_socio',
-                      'nome_socio_razao_social',
-                      'cpf_cnpj_socio',
-                      'qualificacao_socio',
-                      'data_entrada_sociedade',
-                      'pais',
-                      'representante_legal',
-                      'nome_do_representante',
-                      'qualificacao_representante_legal',
-                      'faixa_etaria']
+    socios.columns = [
+        "cnpj_basico",
+        "identificador_socio",
+        "nome_socio_razao_social",
+        "cpf_cnpj_socio",
+        "qualificacao_socio",
+        "data_entrada_sociedade",
+        "pais",
+        "representante_legal",
+        "nome_do_representante",
+        "qualificacao_representante_legal",
+        "faixa_etaria",
+    ]
 
     # Gravar dados no banco:
     # socios
-    to_sql(socios, name='socios', con=engine, if_exists='append', index=False)
-    print('Arquivo ' + arquivos_socios[e] + ' inserido com sucesso no banco de dados!')
+    to_sql(socios, name="socios", con=engine, if_exists="append", index=False)
+    print("Arquivo " + arquivos_socios[e] + " inserido com sucesso no banco de dados!")
 
 try:
     del socios
 except:
     pass
-print('Arquivos de socios finalizados!')
+print("Arquivos de socios finalizados!")
 socios_insert_end = time.time()
 socios_Tempo_insert = round((socios_insert_end - socios_insert_start))
-print('Tempo de execução do processo de sócios (em segundos): ' + str(socios_Tempo_insert))
+print(
+    "Tempo de execução do processo de sócios (em segundos): " + str(socios_Tempo_insert)
+)
 
-#%%
+# %%
 # Arquivos de simples:
 simples_insert_start = time.time()
-print("""
+print(
+    """
 ################################
 ## Arquivos do SIMPLES NACIONAL:
 ################################
-""")
+"""
+)
 
 # Drop table antes do insert
 cur.execute('DROP TABLE IF EXISTS "simples";')
 conn.commit()
 
 for e in range(0, len(arquivos_simples)):
-    print('Trabalhando no arquivo: '+arquivos_simples[e]+' [...]')
+    print("Trabalhando no arquivo: " + arquivos_simples[e] + " [...]")
     try:
         del simples
     except:
         pass
 
     # Verificar tamanho do arquivo:
-    print('Lendo o arquivo ' + arquivos_simples[e]+' [...]')
-    simples_dtypes = ({0: object, 1: object, 2: 'Int32', 3: 'Int32', 4: object, 5: 'Int32', 6: 'Int32'})
+    print("Lendo o arquivo " + arquivos_simples[e] + " [...]")
+    simples_dtypes = {
+        0: object,
+        1: object,
+        2: "Int32",
+        3: "Int32",
+        4: object,
+        5: "Int32",
+        6: "Int32",
+    }
     extracted_file_path = os.path.join(extracted_files, arquivos_simples[e])
 
     simples_lenght = sum(1 for line in open(extracted_file_path, "r"))
-    print('Linhas no arquivo do Simples '+ arquivos_simples[e] +': '+str(simples_lenght))
+    print(
+        "Linhas no arquivo do Simples "
+        + arquivos_simples[e]
+        + ": "
+        + str(simples_lenght)
+    )
 
-    tamanho_das_partes = 1000000 # Registros por carga
+    tamanho_das_partes = 1000000  # Registros por carga
     partes = round(simples_lenght / tamanho_das_partes)
     nrows = tamanho_das_partes
     skiprows = 0
 
-    print('Este arquivo será dividido em ' + str(partes) + ' partes para inserção no banco de dados')
+    print(
+        "Este arquivo será dividido em "
+        + str(partes)
+        + " partes para inserção no banco de dados"
+    )
 
     for i in range(0, partes):
-        print('Iniciando a parte ' + str(i+1) + ' [...]')
-        simples = pd.DataFrame(columns=[1,2,3,4,5,6])
+        print("Iniciando a parte " + str(i + 1) + " [...]")
+        simples = pd.DataFrame(columns=[1, 2, 3, 4, 5, 6])
 
-        simples = pd.read_csv(filepath_or_buffer=extracted_file_path,
-                              sep=';',
-                              nrows=nrows,
-                              skiprows=skiprows,
-                              header=None,
-                              dtype=simples_dtypes,
-                              encoding='latin-1',
+        simples = pd.read_csv(
+            filepath_or_buffer=extracted_file_path,
+            sep=";",
+            nrows=nrows,
+            skiprows=skiprows,
+            header=None,
+            dtype=simples_dtypes,
+            encoding="latin-1",
         )
 
         # Tratamento do arquivo antes de inserir na base:
         simples = simples.reset_index()
-        del simples['index']
+        del simples["index"]
 
         # Renomear colunas
-        simples.columns = ['cnpj_basico',
-                           'opcao_pelo_simples',
-                           'data_opcao_simples',
-                           'data_exclusao_simples',
-                           'opcao_mei',
-                           'data_opcao_mei',
-                           'data_exclusao_mei']
+        simples.columns = [
+            "cnpj_basico",
+            "opcao_pelo_simples",
+            "data_opcao_simples",
+            "data_exclusao_simples",
+            "opcao_mei",
+            "data_opcao_mei",
+            "data_exclusao_mei",
+        ]
 
-        skiprows = skiprows+nrows
+        skiprows = skiprows + nrows
 
         # Gravar dados no banco:
         # simples
-        to_sql(simples, name='simples', con=engine, if_exists='append', index=False)
-        print('Arquivo ' + arquivos_simples[e] + ' inserido com sucesso no banco de dados! - Parte '+ str(i+1))
+        to_sql(simples, name="simples", con=engine, if_exists="append", index=False)
+        print(
+            "Arquivo "
+            + arquivos_simples[e]
+            + " inserido com sucesso no banco de dados! - Parte "
+            + str(i + 1)
+        )
 
         try:
             del simples
@@ -570,316 +742,393 @@ try:
 except:
     pass
 
-print('Arquivos do simples finalizados!')
+print("Arquivos do simples finalizados!")
 simples_insert_end = time.time()
 simples_Tempo_insert = round((simples_insert_end - simples_insert_start))
-print('Tempo de execução do processo do Simples Nacional (em segundos): ' + str(simples_Tempo_insert))
+print(
+    "Tempo de execução do processo do Simples Nacional (em segundos): "
+    + str(simples_Tempo_insert)
+)
 
-#%%
+# %%
 # Arquivos de cnae:
 cnae_insert_start = time.time()
-print("""
+print(
+    """
 ######################
 ## Arquivos de cnae:
 ######################
-""")
+"""
+)
 
 # Drop table antes do insert
 cur.execute('DROP TABLE IF EXISTS "cnae";')
 conn.commit()
 
 for e in range(0, len(arquivos_cnae)):
-    print('Trabalhando no arquivo: '+arquivos_cnae[e]+' [...]')
+    print("Trabalhando no arquivo: " + arquivos_cnae[e] + " [...]")
     try:
         del cnae
     except:
         pass
 
     extracted_file_path = os.path.join(extracted_files, arquivos_cnae[e])
-    cnae = pd.DataFrame(columns=[1,2])
-    cnae = pd.read_csv(filepath_or_buffer=extracted_file_path, sep=';', skiprows=0, header=None, dtype='object', encoding='latin-1')
+    cnae = pd.DataFrame(columns=[1, 2])
+    cnae = pd.read_csv(
+        filepath_or_buffer=extracted_file_path,
+        sep=";",
+        skiprows=0,
+        header=None,
+        dtype="object",
+        encoding="latin-1",
+    )
 
     # Tratamento do arquivo antes de inserir na base:
     cnae = cnae.reset_index()
-    del cnae['index']
+    del cnae["index"]
 
     # Renomear colunas
-    cnae.columns = ['codigo', 'descricao']
+    cnae.columns = ["codigo", "descricao"]
 
     # Gravar dados no banco:
     # cnae
-    to_sql(cnae, name='cnae', con=engine, if_exists='append', index=False)
-    print('Arquivo ' + arquivos_cnae[e] + ' inserido com sucesso no banco de dados!')
+    to_sql(cnae, name="cnae", con=engine, if_exists="append", index=False)
+    print("Arquivo " + arquivos_cnae[e] + " inserido com sucesso no banco de dados!")
 
 try:
     del cnae
 except:
     pass
-print('Arquivos de cnae finalizados!')
+print("Arquivos de cnae finalizados!")
 cnae_insert_end = time.time()
 cnae_Tempo_insert = round((cnae_insert_end - cnae_insert_start))
-print('Tempo de execução do processo de cnae (em segundos): ' + str(cnae_Tempo_insert))
+print("Tempo de execução do processo de cnae (em segundos): " + str(cnae_Tempo_insert))
 
-#%%
+# %%
 # Arquivos de moti:
 moti_insert_start = time.time()
-print("""
+print(
+    """
 #########################################
 ## Arquivos de motivos da situação atual:
 #########################################
-""")
+"""
+)
 
 # Drop table antes do insert
 cur.execute('DROP TABLE IF EXISTS "moti";')
 conn.commit()
 
 for e in range(0, len(arquivos_moti)):
-    print('Trabalhando no arquivo: '+arquivos_moti[e]+' [...]')
+    print("Trabalhando no arquivo: " + arquivos_moti[e] + " [...]")
     try:
         del moti
     except:
         pass
 
-    moti_dtypes = ({0: 'Int32', 1: object})
+    moti_dtypes = {0: "Int32", 1: object}
     extracted_file_path = os.path.join(extracted_files, arquivos_moti[e])
-    moti = pd.read_csv(filepath_or_buffer=extracted_file_path, sep=';', skiprows=0, header=None, dtype=moti_dtypes, encoding='latin-1')
+    moti = pd.read_csv(
+        filepath_or_buffer=extracted_file_path,
+        sep=";",
+        skiprows=0,
+        header=None,
+        dtype=moti_dtypes,
+        encoding="latin-1",
+    )
 
     # Tratamento do arquivo antes de inserir na base:
     moti = moti.reset_index()
-    del moti['index']
+    del moti["index"]
 
     # Renomear colunas
-    moti.columns = ['codigo', 'descricao']
+    moti.columns = ["codigo", "descricao"]
 
     # Gravar dados no banco:
     # moti
-    to_sql(moti, name='moti', con=engine, if_exists='append', index=False)
-    print('Arquivo ' + arquivos_moti[e] + ' inserido com sucesso no banco de dados!')
+    to_sql(moti, name="moti", con=engine, if_exists="append", index=False)
+    print("Arquivo " + arquivos_moti[e] + " inserido com sucesso no banco de dados!")
 
 try:
     del moti
 except:
     pass
-print('Arquivos de moti finalizados!')
+print("Arquivos de moti finalizados!")
 moti_insert_end = time.time()
 moti_Tempo_insert = round((moti_insert_end - moti_insert_start))
-print('Tempo de execução do processo de motivos da situação atual (em segundos): ' + str(moti_Tempo_insert))
+print(
+    "Tempo de execução do processo de motivos da situação atual (em segundos): "
+    + str(moti_Tempo_insert)
+)
 
-#%%
+# %%
 # Arquivos de munic:
 munic_insert_start = time.time()
-print("""
+print(
+    """
 ##########################
 ## Arquivos de municípios:
 ##########################
-""")
+"""
+)
 
 # Drop table antes do insert
 cur.execute('DROP TABLE IF EXISTS "munic";')
 conn.commit()
 
 for e in range(0, len(arquivos_munic)):
-    print('Trabalhando no arquivo: '+arquivos_munic[e]+' [...]')
+    print("Trabalhando no arquivo: " + arquivos_munic[e] + " [...]")
     try:
         del munic
     except:
         pass
 
-    munic_dtypes = ({0: 'Int32', 1: object})
+    munic_dtypes = {0: "Int32", 1: object}
     extracted_file_path = os.path.join(extracted_files, arquivos_munic[e])
-    munic = pd.read_csv(filepath_or_buffer=extracted_file_path, sep=';', skiprows=0, header=None, dtype=munic_dtypes, encoding='latin-1')
+    munic = pd.read_csv(
+        filepath_or_buffer=extracted_file_path,
+        sep=";",
+        skiprows=0,
+        header=None,
+        dtype=munic_dtypes,
+        encoding="latin-1",
+    )
 
     # Tratamento do arquivo antes de inserir na base:
     munic = munic.reset_index()
-    del munic['index']
+    del munic["index"]
 
     # Renomear colunas
-    munic.columns = ['codigo', 'descricao']
+    munic.columns = ["codigo", "descricao"]
 
     # Acoplar códigos IBGE a partir de municipios.csv se existir
     proj_dir = os.path.dirname(dotenv_path)
-    csv_path = os.path.join(proj_dir, 'municipios.csv')
+    csv_path = os.path.join(proj_dir, "municipios.csv")
     if os.path.isfile(csv_path):
         print(f"Acoplando códigos IBGE a partir de: {csv_path}...")
-        df_csv = pd.read_csv(csv_path, sep=';', encoding='latin1')
+        df_csv = pd.read_csv(csv_path, sep=";", encoding="latin1")
         df_csv.columns = [col.strip() for col in df_csv.columns]
-        mapping = df_csv[['CÓDIGO DO MUNICÍPIO - TOM', 'CÓDIGO DO MUNICÍPIO - IBGE']].copy()
-        mapping.columns = ['codigo', 'cd_mun']
-        mapping = mapping.drop_duplicates(subset=['codigo'])
-        
+        mapping = df_csv[
+            ["CÓDIGO DO MUNICÍPIO - TOM", "CÓDIGO DO MUNICÍPIO - IBGE"]
+        ].copy()
+        mapping.columns = ["codigo", "cd_mun"]
+        mapping = mapping.drop_duplicates(subset=["codigo"])
+
         # Inserir manualmente o registro de Boa Esperança do Norte
-        if 1182 not in mapping['codigo'].values:
-            new_row = pd.DataFrame([{'codigo': 1182, 'cd_mun': 5101837}])
+        if 1182 not in mapping["codigo"].values:
+            new_row = pd.DataFrame([{"codigo": 1182, "cd_mun": 5101837}])
             mapping = pd.concat([mapping, new_row], ignore_index=True)
-            
-        mapping['codigo'] = mapping['codigo'].astype('Int32')
-        mapping['cd_mun'] = mapping['cd_mun'].astype('Int32')
-        munic['codigo'] = munic['codigo'].astype('Int32')
-        
-        munic = pd.merge(munic, mapping, on='codigo', how='left')
+
+        mapping["codigo"] = mapping["codigo"].astype("Int32")
+        mapping["cd_mun"] = mapping["cd_mun"].astype("Int32")
+        munic["codigo"] = munic["codigo"].astype("Int32")
+
+        munic = pd.merge(munic, mapping, on="codigo", how="left")
     else:
-        print(f"Aviso: arquivo {csv_path} não encontrado. Coluna cd_mun não será populada.")
+        print(
+            f"Aviso: arquivo {csv_path} não encontrado. Coluna cd_mun não será populada."
+        )
 
     # Gravar dados no banco:
     # munic
-    to_sql(munic, name='munic', con=engine, if_exists='append', index=False)
-    print('Arquivo ' + arquivos_munic[e] + ' inserido com sucesso no banco de dados!')
+    to_sql(munic, name="munic", con=engine, if_exists="append", index=False)
+    print("Arquivo " + arquivos_munic[e] + " inserido com sucesso no banco de dados!")
 
 try:
     del munic
 except:
     pass
-print('Arquivos de munic finalizados!')
+print("Arquivos de munic finalizados!")
 munic_insert_end = time.time()
 munic_Tempo_insert = round((munic_insert_end - munic_insert_start))
-print('Tempo de execução do processo de municípios (em segundos): ' + str(munic_Tempo_insert))
+print(
+    "Tempo de execução do processo de municípios (em segundos): "
+    + str(munic_Tempo_insert)
+)
 
-#%%
+# %%
 # Arquivos de natju:
 natju_insert_start = time.time()
-print("""
+print(
+    """
 #################################
 ## Arquivos de natureza jurídica:
 #################################
-""")
+"""
+)
 
 # Drop table antes do insert
 cur.execute('DROP TABLE IF EXISTS "natju";')
 conn.commit()
 
 for e in range(0, len(arquivos_natju)):
-    print('Trabalhando no arquivo: '+arquivos_natju[e]+' [...]')
+    print("Trabalhando no arquivo: " + arquivos_natju[e] + " [...]")
     try:
         del natju
     except:
         pass
 
-    natju_dtypes = ({0: 'Int32', 1: object})
+    natju_dtypes = {0: "Int32", 1: object}
     extracted_file_path = os.path.join(extracted_files, arquivos_natju[e])
-    natju = pd.read_csv(filepath_or_buffer=extracted_file_path, sep=';', skiprows=0, header=None, dtype=natju_dtypes, encoding='latin-1')
+    natju = pd.read_csv(
+        filepath_or_buffer=extracted_file_path,
+        sep=";",
+        skiprows=0,
+        header=None,
+        dtype=natju_dtypes,
+        encoding="latin-1",
+    )
 
     # Tratamento do arquivo antes de inserir na base:
     natju = natju.reset_index()
-    del natju['index']
+    del natju["index"]
 
     # Renomear colunas
-    natju.columns = ['codigo', 'descricao']
+    natju.columns = ["codigo", "descricao"]
 
     # Gravar dados no banco:
     # natju
-    to_sql(natju, name='natju', con=engine, if_exists='append', index=False)
-    print('Arquivo ' + arquivos_natju[e] + ' inserido com sucesso no banco de dados!')
+    to_sql(natju, name="natju", con=engine, if_exists="append", index=False)
+    print("Arquivo " + arquivos_natju[e] + " inserido com sucesso no banco de dados!")
 
 try:
     del natju
 except:
     pass
-print('Arquivos de natju finalizados!')
+print("Arquivos de natju finalizados!")
 natju_insert_end = time.time()
 natju_Tempo_insert = round((natju_insert_end - natju_insert_start))
-print('Tempo de execução do processo de natureza jurídica (em segundos): ' + str(natju_Tempo_insert))
+print(
+    "Tempo de execução do processo de natureza jurídica (em segundos): "
+    + str(natju_Tempo_insert)
+)
 
-#%%
+# %%
 # Arquivos de pais:
 pais_insert_start = time.time()
-print("""
+print(
+    """
 ######################
 ## Arquivos de país:
 ######################
-""")
+"""
+)
 
 # Drop table antes do insert
 cur.execute('DROP TABLE IF EXISTS "pais";')
 conn.commit()
 
 for e in range(0, len(arquivos_pais)):
-    print('Trabalhando no arquivo: '+arquivos_pais[e]+' [...]')
+    print("Trabalhando no arquivo: " + arquivos_pais[e] + " [...]")
     try:
         del pais
     except:
         pass
 
-    pais_dtypes = ({0: 'Int32', 1: object})
+    pais_dtypes = {0: "Int32", 1: object}
     extracted_file_path = os.path.join(extracted_files, arquivos_pais[e])
-    pais = pd.read_csv(filepath_or_buffer=extracted_file_path, sep=';', skiprows=0, header=None, dtype=pais_dtypes, encoding='latin-1')
+    pais = pd.read_csv(
+        filepath_or_buffer=extracted_file_path,
+        sep=";",
+        skiprows=0,
+        header=None,
+        dtype=pais_dtypes,
+        encoding="latin-1",
+    )
 
     # Tratamento do arquivo antes de inserir na base:
     pais = pais.reset_index()
-    del pais['index']
+    del pais["index"]
 
     # Renomear colunas
-    pais.columns = ['codigo', 'descricao']
+    pais.columns = ["codigo", "descricao"]
 
     # Gravar dados no banco:
     # pais
-    to_sql(pais, name='pais', con=engine, if_exists='append', index=False)
-    print('Arquivo ' + arquivos_pais[e] + ' inserido com sucesso no banco de dados!')
+    to_sql(pais, name="pais", con=engine, if_exists="append", index=False)
+    print("Arquivo " + arquivos_pais[e] + " inserido com sucesso no banco de dados!")
 
 try:
     del pais
 except:
     pass
-print('Arquivos de pais finalizados!')
+print("Arquivos de pais finalizados!")
 pais_insert_end = time.time()
 pais_Tempo_insert = round((pais_insert_end - pais_insert_start))
-print('Tempo de execução do processo de país (em segundos): ' + str(pais_Tempo_insert))
+print("Tempo de execução do processo de país (em segundos): " + str(pais_Tempo_insert))
 
-#%%
+# %%
 # Arquivos de qualificação de sócios:
 quals_insert_start = time.time()
-print("""
+print(
+    """
 ######################################
 ## Arquivos de qualificação de sócios:
 ######################################
-""")
+"""
+)
 
 # Drop table antes do insert
 cur.execute('DROP TABLE IF EXISTS "quals";')
 conn.commit()
 
 for e in range(0, len(arquivos_quals)):
-    print('Trabalhando no arquivo: '+arquivos_quals[e]+' [...]')
+    print("Trabalhando no arquivo: " + arquivos_quals[e] + " [...]")
     try:
         del quals
     except:
         pass
 
-    quals_dtypes = ({0: 'Int32', 1: object})
+    quals_dtypes = {0: "Int32", 1: object}
     extracted_file_path = os.path.join(extracted_files, arquivos_quals[e])
-    quals = pd.read_csv(filepath_or_buffer=extracted_file_path, sep=';', skiprows=0, header=None, dtype=quals_dtypes, encoding='latin-1')
+    quals = pd.read_csv(
+        filepath_or_buffer=extracted_file_path,
+        sep=";",
+        skiprows=0,
+        header=None,
+        dtype=quals_dtypes,
+        encoding="latin-1",
+    )
 
     # Tratamento do arquivo antes de inserir na base:
     quals = quals.reset_index()
-    del quals['index']
+    del quals["index"]
 
     # Renomear colunas
-    quals.columns = ['codigo', 'descricao']
+    quals.columns = ["codigo", "descricao"]
 
     # Gravar dados no banco:
     # quals
-    to_sql(quals, name='quals', con=engine, if_exists='append', index=False)
-    print('Arquivo ' + arquivos_quals[e] + ' inserido com sucesso no banco de dados!')
+    to_sql(quals, name="quals", con=engine, if_exists="append", index=False)
+    print("Arquivo " + arquivos_quals[e] + " inserido com sucesso no banco de dados!")
 
 try:
     del quals
 except:
     pass
-print('Arquivos de quals finalizados!')
+print("Arquivos de quals finalizados!")
 quals_insert_end = time.time()
 quals_Tempo_insert = round((quals_insert_end - quals_insert_start))
-print('Tempo de execução do processo de qualificação de sócios (em segundos): ' + str(quals_Tempo_insert))
+print(
+    "Tempo de execução do processo de qualificação de sócios (em segundos): "
+    + str(quals_Tempo_insert)
+)
 
-#%%
+# %%
 insert_end = time.time()
 Tempo_insert = round((insert_end - insert_start))
 
-print("""
+print(
+    """
 #############################################
 ## Processo de carga dos arquivos finalizado!
 #############################################
-""")
+"""
+)
 
-print('Tempo total de execução do processo de carga (em segundos): ' + str(Tempo_insert)) # Tempo de execução do processo (em segundos): 17.770 (4hrs e 57 min)
+print(
+    "Tempo total de execução do processo de carga (em segundos): " + str(Tempo_insert)
+)  # Tempo de execução do processo (em segundos): 17.770 (4hrs e 57 min)
 
 # ###############################
 # Tamanho dos arquivos:
@@ -889,29 +1138,37 @@ print('Tempo total de execução do processo de carga (em segundos): ' + str(Tem
 # simples = 27.893.923
 # ###############################
 
-#%%
+# %%
 # Criar índices na base de dados:
 index_start = time.time()
-print("""
+print(
+    """
 #######################################
 ## Criar índices na base de dados [...]
 #######################################
-""")
+"""
+)
 for table_name in ["empresa", "estabelecimento", "socios", "simples"]:
-    cur.execute(f"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = '{table_name}');")
+    cur.execute(
+        f"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = '{table_name}');"
+    )
     exists = cur.fetchone()[0]
     if exists:
         print(f"Criando índice para {table_name} [...]")
-        cur.execute(f"create index if not exists {table_name}_cnpj on {table_name}(cnpj_basico);")
+        cur.execute(
+            f"create index if not exists {table_name}_cnpj on {table_name}(cnpj_basico);"
+        )
         conn.commit()
         print(f"Índice {table_name}_cnpj criado com sucesso!")
 
 index_end = time.time()
 index_time = round(index_end - index_start)
-print('Tempo para criar os índices (em segundos): ' + str(index_time))
+print("Tempo para criar os índices (em segundos): " + str(index_time))
 
-#%%
-print("""Processo 100% finalizado! Você já pode usar seus dados no BD!
+# %%
+print(
+    """Processo 100% finalizado! Você já pode usar seus dados no BD!
  - Desenvolvido por: Aphonso Henrique do Amaral Rafael
  - Contribua com esse projeto aqui: https://github.com/aphonsoar/Receita_Federal_do_Brasil_-_Dados_Publicos_CNPJ
-""")
+"""
+)
