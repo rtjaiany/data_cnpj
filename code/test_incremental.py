@@ -74,7 +74,7 @@ def setup_test_schema(cur):
             cpf_cnpj_socio TEXT,
             qualificacao_socio INTEGER,
             data_entrada_sociedade INTEGER,
-            pais TEXT,
+            pais INTEGER,
             representante_legal TEXT,
             nome_do_representante TEXT,
             qualificacao_representante_legal INTEGER,
