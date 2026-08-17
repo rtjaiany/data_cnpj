@@ -34,9 +34,6 @@ def load_csv_to_staging(cur, file_path, table_name, dtypes, columns, delimiter="
     chunksize = 200000
     print(f"Loading {file_path} into staging_{table_name}...")
     
-    # Empty existing staging table
-    cur.execute(f"TRUNCATE TABLE staging_{table_name};")
-    
     count = 0
     for chunk in pd.read_csv(
         file_path,
@@ -247,6 +244,15 @@ def main():
                 print(f"Creating staging_{t} matching table structure...")
                 cur.execute(f"CREATE TABLE staging_{t} (LIKE {t});")
                 conn.commit()
+
+        # Truncate staging tables once at the start of a fresh month (to accumulate multi-part files)
+        cur.execute("SELECT COUNT(*) FROM processed_files WHERE file_path LIKE %s", (f"{data_folder}/%",))
+        checkpoint_cnt = cur.fetchone()[0]
+        if checkpoint_cnt == 0:
+            print(f"Fresh run for {data_folder}. Truncating staging tables...")
+            for t in tables_to_create:
+                cur.execute(f"TRUNCATE TABLE staging_{t};")
+            conn.commit()
             
         for idx, zip_name in enumerate(files_to_download, 1):
             checkpoint_key = f"{data_folder}/{zip_name}"
