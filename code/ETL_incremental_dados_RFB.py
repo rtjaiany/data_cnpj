@@ -55,6 +55,9 @@ def load_csv_to_staging(cur, file_path, table_name, dtypes, columns, delimiter="
             )
             chunk["capital_social"] = chunk["capital_social"].astype(float)
             
+        # Convert to object and replace nulls with None to output correct empty strings for NULLs
+        chunk = chunk.astype(object).where(pd.notnull(chunk), None)
+
         # Convert to list of tuples for COPY
         data_iter = [tuple(x) for x in chunk.itertuples(index=False)]
         psql_insert_copy(cur, f"staging_{table_name}", data_iter, columns)
