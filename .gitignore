@@ -135,4 +135,5 @@ dmypy.json
 /OUTPUT_FILES/
 /EXTRACTED_FILES/
 /snapshots_samples/
+/ignored_fields/
 *.csv
