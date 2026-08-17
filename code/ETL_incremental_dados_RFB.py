@@ -677,8 +677,8 @@ def main():
                     LEFT JOIN staging_empresa stg ON stg.cnpj_basico = l.cnpj_basico
                     WHERE l.is_deleted = FALSE
                       AND stg.cnpj_basico IS NULL
-                    UNION ALL
-                    SELECT b.cnpj_basico
+                    UNION
+                    SELECT DISTINCT b.cnpj_basico
                     FROM empresa b
                     LEFT JOIN latest_state_empresa l ON l.cnpj_basico = b.cnpj_basico
                     LEFT JOIN staging_empresa stg ON stg.cnpj_basico = b.cnpj_basico
@@ -1049,8 +1049,8 @@ def main():
                     LEFT JOIN staging_estabelecimento stg ON stg.cnpj_basico = l.cnpj_basico AND stg.cnpj_ordem = l.cnpj_ordem AND stg.cnpj_dv = l.cnpj_dv
                     WHERE l.is_deleted = FALSE
                       AND stg.cnpj_basico IS NULL
-                    UNION ALL
-                    SELECT b.cnpj_basico, b.cnpj_ordem, b.cnpj_dv
+                    UNION
+                    SELECT DISTINCT b.cnpj_basico, b.cnpj_ordem, b.cnpj_dv
                     FROM estabelecimento b
                     LEFT JOIN latest_state_estabelecimento l ON l.cnpj_basico = b.cnpj_basico AND l.cnpj_ordem = b.cnpj_ordem AND l.cnpj_dv = b.cnpj_dv
                     LEFT JOIN staging_estabelecimento stg ON stg.cnpj_basico = b.cnpj_basico AND stg.cnpj_ordem = b.cnpj_ordem AND stg.cnpj_dv = b.cnpj_dv
@@ -1237,8 +1237,8 @@ def main():
                     LEFT JOIN staging_socios stg ON stg.cnpj_basico = l.cnpj_basico AND stg.nome_socio_razao_social = l.nome_socio_razao_social
                     WHERE l.is_deleted = FALSE
                       AND stg.cnpj_basico IS NULL
-                    UNION ALL
-                    SELECT b.cnpj_basico, b.nome_socio_razao_social
+                    UNION
+                    SELECT DISTINCT b.cnpj_basico, b.nome_socio_razao_social
                     FROM socios b
                     LEFT JOIN latest_state_socios l ON l.cnpj_basico = b.cnpj_basico AND l.nome_socio_razao_social = b.nome_socio_razao_social
                     LEFT JOIN staging_socios stg ON stg.cnpj_basico = b.cnpj_basico AND stg.nome_socio_razao_social = b.nome_socio_razao_social
@@ -1408,8 +1408,8 @@ def main():
                     LEFT JOIN staging_simples stg ON stg.cnpj_basico = l.cnpj_basico
                     WHERE l.is_deleted = FALSE
                       AND stg.cnpj_basico IS NULL
-                    UNION ALL
-                    SELECT b.cnpj_basico
+                    UNION
+                    SELECT DISTINCT b.cnpj_basico
                     FROM simples b
                     LEFT JOIN latest_state_simples l ON l.cnpj_basico = b.cnpj_basico
                     LEFT JOIN staging_simples stg ON stg.cnpj_basico = b.cnpj_basico
