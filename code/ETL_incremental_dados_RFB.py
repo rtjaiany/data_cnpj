@@ -104,6 +104,25 @@ def main():
         data_folder = os.getenv("NEXTCLOUD_FOLDER", "2023-06")
         print(f"Reference month fallback to config: {data_folder}")
         
+    # Check if download month changed and clean up old ZIPs to prevent corrupt resumes
+    download_month_file = os.path.join(output_files, ".download_month")
+    current_download_month = None
+    if os.path.exists(download_month_file):
+        try:
+            with open(download_month_file, "r") as f:
+                current_download_month = f.read().strip()
+        except Exception:
+            pass
+
+    if current_download_month != data_folder:
+        print(f"Target month changed ({current_download_month} -> {data_folder}). Cleaning up old zip files from {output_files}...")
+        for f in os.listdir(output_files):
+            if f.lower().endswith(".zip"):
+                try:
+                    os.remove(os.path.join(output_files, f))
+                except Exception as e:
+                    print(f"Error removing old ZIP file {f}: {e}")
+
     # Canonical date representation (first day of reference month)
     try:
         ref_month_date = f"{data_folder}-01"
