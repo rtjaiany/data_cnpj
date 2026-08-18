@@ -53,6 +53,9 @@ def load_csv_to_staging(cur, file_path, table_name, dtypes, columns, delimiter="
                 lambda x: str(x).replace(",", ".") if pd.notnull(x) else x
             )
             chunk["capital_social"] = chunk["capital_social"].astype(float)
+        elif table_name == "socios":
+            # Ensure nome_socio_razao_social is never NaN/NULL to prevent primary key constraint violations
+            chunk["nome_socio_razao_social"] = chunk["nome_socio_razao_social"].fillna("")
             
         # Convert to object and replace nulls with None to output correct empty strings for NULLs
         chunk = chunk.astype(object).where(pd.notnull(chunk), None)

@@ -623,6 +623,7 @@ for e in range(0, len(arquivos_socios)):
 
     # Gravar dados no banco:
     # socios
+    socios["nome_socio_razao_social"] = socios["nome_socio_razao_social"].fillna("")
     to_sql(socios, name="socios", con=engine, if_exists="append", index=False)
     print("Arquivo " + arquivos_socios[e] + " inserido com sucesso no banco de dados!")
 
