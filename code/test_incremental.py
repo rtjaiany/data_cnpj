@@ -13,7 +13,8 @@ sys.path.append(os.path.join(current_path, "code"))
 from ETL_incremental_dados_RFB import (
     export_ignored_fields_parquet,
     schema_empresa,
-    schema_estabelecimento
+    schema_estabelecimento,
+    schema_estabelecimento_enderecos
 )
 
 def setup_test_schema(cur):
@@ -120,17 +121,10 @@ def setup_test_schema(cur):
             situacao_cadastral INTEGER,
             data_situacao_cadastral INTEGER,
             motivo_situacao_cadastral INTEGER,
-            nome_cidade_exterior TEXT,
             pais TEXT,
             data_inicio_atividade INTEGER,
             cnae_fiscal_principal INTEGER,
             cnae_fiscal_secundaria TEXT,
-            tipo_logradouro TEXT,
-            logradouro TEXT,
-            numero TEXT,
-            complemento TEXT,
-            bairro TEXT,
-            cep TEXT,
             uf TEXT,
             municipio INTEGER,
             situacao_especial TEXT,
@@ -427,17 +421,10 @@ def run_change_detection_estabelecimento(cur, ref_month_date, collection_date):
                 'situacao_cadastral', stg.situacao_cadastral,
                 'data_situacao_cadastral', stg.data_situacao_cadastral,
                 'motivo_situacao_cadastral', stg.motivo_situacao_cadastral,
-                'nome_cidade_exterior', stg.nome_cidade_exterior,
                 'pais', stg.pais,
                 'data_inicio_atividade', stg.data_inicio_atividade,
                 'cnae_fiscal_principal', stg.cnae_fiscal_principal,
                 'cnae_fiscal_secundaria', stg.cnae_fiscal_secundaria,
-                'tipo_logradouro', stg.tipo_logradouro,
-                'logradouro', stg.logradouro,
-                'numero', stg.numero,
-                'complemento', stg.complemento,
-                'bairro', stg.bairro,
-                'cep', stg.cep,
                 'uf', stg.uf,
                 'municipio', stg.municipio,
                 'situacao_especial', stg.situacao_especial,
@@ -462,17 +449,10 @@ def run_change_detection_estabelecimento(cur, ref_month_date, collection_date):
                             'situacao_cadastral', l.situacao_cadastral,
                             'data_situacao_cadastral', l.data_situacao_cadastral,
                             'motivo_situacao_cadastral', l.motivo_situacao_cadastral,
-                            'nome_cidade_exterior', l.nome_cidade_exterior,
                             'pais', l.pais,
                             'data_inicio_atividade', l.data_inicio_atividade,
                             'cnae_fiscal_principal', l.cnae_fiscal_principal,
                             'cnae_fiscal_secundaria', l.cnae_fiscal_secundaria,
-                            'tipo_logradouro', l.tipo_logradouro,
-                            'logradouro', l.logradouro,
-                            'numero', l.numero,
-                            'complemento', l.complemento,
-                            'bairro', l.bairro,
-                            'cep', l.cep,
                             'uf', l.uf,
                             'municipio', l.municipio,
                             'situacao_especial', l.situacao_especial,
@@ -487,17 +467,10 @@ def run_change_detection_estabelecimento(cur, ref_month_date, collection_date):
                             'situacao_cadastral', b.situacao_cadastral,
                             'data_situacao_cadastral', b.data_situacao_cadastral,
                             'motivo_situacao_cadastral', b.motivo_situacao_cadastral,
-                            'nome_cidade_exterior', b.nome_cidade_exterior,
                             'pais', b.pais,
                             'data_inicio_atividade', b.data_inicio_atividade,
                             'cnae_fiscal_principal', b.cnae_fiscal_principal,
                             'cnae_fiscal_secundaria', b.cnae_fiscal_secundaria,
-                            'tipo_logradouro', b.tipo_logradouro,
-                            'logradouro', b.logradouro,
-                            'numero', b.numero,
-                            'complemento', b.complemento,
-                            'bairro', b.bairro,
-                            'cep', b.cep,
                             'uf', b.uf,
                             'municipio', b.municipio,
                             'situacao_especial', b.situacao_especial,
@@ -509,17 +482,10 @@ def run_change_detection_estabelecimento(cur, ref_month_date, collection_date):
                 COALESCE(l.situacao_cadastral, b.situacao_cadastral) as prev_situacao_cadastral,
                 COALESCE(l.data_situacao_cadastral, b.data_situacao_cadastral) as prev_data_situacao_cadastral,
                 COALESCE(l.motivo_situacao_cadastral, b.motivo_situacao_cadastral) as prev_motivo_situacao_cadastral,
-                COALESCE(l.nome_cidade_exterior, b.nome_cidade_exterior) as prev_nome_cidade_exterior,
                 COALESCE(l.pais, b.pais) as prev_pais,
                 COALESCE(l.data_inicio_atividade, b.data_inicio_atividade) as prev_data_inicio_atividade,
                 COALESCE(l.cnae_fiscal_principal, b.cnae_fiscal_principal) as prev_cnae_fiscal_principal,
                 COALESCE(l.cnae_fiscal_secundaria, b.cnae_fiscal_secundaria) as prev_cnae_fiscal_secundaria,
-                COALESCE(l.tipo_logradouro, b.tipo_logradouro) as prev_tipo_logradouro,
-                COALESCE(l.logradouro, b.logradouro) as prev_logradouro,
-                COALESCE(l.numero, b.numero) as prev_numero,
-                COALESCE(l.complemento, b.complemento) as prev_complemento,
-                COALESCE(l.bairro, b.bairro) as prev_bairro,
-                COALESCE(l.cep, b.cep) as prev_cep,
                 COALESCE(l.uf, b.uf) as prev_uf,
                 COALESCE(l.municipio, b.municipio) as prev_municipio,
                 COALESCE(l.situacao_especial, b.situacao_especial) as prev_situacao_especial,
@@ -534,17 +500,10 @@ def run_change_detection_estabelecimento(cur, ref_month_date, collection_date):
                     stg.situacao_cadastral IS DISTINCT FROM p.prev_situacao_cadastral OR
                     stg.data_situacao_cadastral IS DISTINCT FROM p.prev_data_situacao_cadastral OR
                     stg.motivo_situacao_cadastral IS DISTINCT FROM p.prev_motivo_situacao_cadastral OR
-                    stg.nome_cidade_exterior IS DISTINCT FROM p.prev_nome_cidade_exterior OR
                     stg.pais IS DISTINCT FROM p.prev_pais OR
                     stg.data_inicio_atividade IS DISTINCT FROM p.prev_data_inicio_atividade OR
                     stg.cnae_fiscal_principal IS DISTINCT FROM p.prev_cnae_fiscal_principal OR
                     stg.cnae_fiscal_secundaria IS DISTINCT FROM p.prev_cnae_fiscal_secundaria OR
-                    stg.tipo_logradouro IS DISTINCT FROM p.prev_tipo_logradouro OR
-                    stg.logradouro IS DISTINCT FROM p.prev_logradouro OR
-                    stg.numero IS DISTINCT FROM p.prev_numero OR
-                    stg.complemento IS DISTINCT FROM p.prev_complemento OR
-                    stg.bairro IS DISTINCT FROM p.prev_bairro OR
-                    stg.cep IS DISTINCT FROM p.prev_cep OR
                     stg.uf IS DISTINCT FROM p.prev_uf OR
                     stg.municipio IS DISTINCT FROM p.prev_municipio OR
                     stg.situacao_especial IS DISTINCT FROM p.prev_situacao_especial OR
@@ -557,15 +516,13 @@ def run_change_detection_estabelecimento(cur, ref_month_date, collection_date):
     cur.execute("""
         INSERT INTO test_incremental.latest_state_estabelecimento (
             cnpj_basico, cnpj_ordem, cnpj_dv, identificador_matriz_filial, situacao_cadastral,
-            data_situacao_cadastral, motivo_situacao_cadastral, nome_cidade_exterior, pais, data_inicio_atividade,
-            cnae_fiscal_principal, cnae_fiscal_secundaria, tipo_logradouro, logradouro, numero, complemento,
-            bairro, cep, uf, municipio, situacao_especial, data_situacao_especial, is_deleted, last_updated_month, data_coleta
+            data_situacao_cadastral, motivo_situacao_cadastral, pais, data_inicio_atividade,
+            cnae_fiscal_principal, cnae_fiscal_secundaria, uf, municipio, situacao_especial, data_situacao_especial, is_deleted, last_updated_month, data_coleta
         )
         SELECT
             stg.cnpj_basico, stg.cnpj_ordem, stg.cnpj_dv, stg.identificador_matriz_filial, stg.situacao_cadastral,
-            stg.data_situacao_cadastral, stg.motivo_situacao_cadastral, stg.nome_cidade_exterior, stg.pais, stg.data_inicio_atividade,
-            stg.cnae_fiscal_principal, stg.cnae_fiscal_secundaria, stg.tipo_logradouro, stg.logradouro, stg.numero, stg.complemento,
-            stg.bairro, stg.cep, stg.uf, stg.municipio, stg.situacao_especial, stg.data_situacao_especial, FALSE, %s::varchar, %s::timestamp
+            stg.data_situacao_cadastral, stg.motivo_situacao_cadastral, stg.pais, stg.data_inicio_atividade,
+            stg.cnae_fiscal_principal, stg.cnae_fiscal_secundaria, stg.uf, stg.municipio, stg.situacao_especial, stg.data_situacao_especial, FALSE, %s::varchar, %s::timestamp
         FROM test_incremental.staging_estabelecimento stg
         LEFT JOIN test_incremental.latest_state_estabelecimento l ON l.cnpj_basico = stg.cnpj_basico AND l.cnpj_ordem = stg.cnpj_ordem AND l.cnpj_dv = stg.cnpj_dv
         LEFT JOIN test_incremental.estabelecimento b ON b.cnpj_basico = stg.cnpj_basico AND b.cnpj_ordem = stg.cnpj_ordem AND b.cnpj_dv = stg.cnpj_dv AND l.cnpj_basico IS NULL
@@ -577,17 +534,10 @@ def run_change_detection_estabelecimento(cur, ref_month_date, collection_date):
                 COALESCE(l.situacao_cadastral, b.situacao_cadastral) as prev_situacao_cadastral,
                 COALESCE(l.data_situacao_cadastral, b.data_situacao_cadastral) as prev_data_situacao_cadastral,
                 COALESCE(l.motivo_situacao_cadastral, b.motivo_situacao_cadastral) as prev_motivo_situacao_cadastral,
-                COALESCE(l.nome_cidade_exterior, b.nome_cidade_exterior) as prev_nome_cidade_exterior,
                 COALESCE(l.pais, b.pais) as prev_pais,
                 COALESCE(l.data_inicio_atividade, b.data_inicio_atividade) as prev_data_inicio_atividade,
                 COALESCE(l.cnae_fiscal_principal, b.cnae_fiscal_principal) as prev_cnae_fiscal_principal,
                 COALESCE(l.cnae_fiscal_secundaria, b.cnae_fiscal_secundaria) as prev_cnae_fiscal_secundaria,
-                COALESCE(l.tipo_logradouro, b.tipo_logradouro) as prev_tipo_logradouro,
-                COALESCE(l.logradouro, b.logradouro) as prev_logradouro,
-                COALESCE(l.numero, b.numero) as prev_numero,
-                COALESCE(l.complemento, b.complemento) as prev_complemento,
-                COALESCE(l.bairro, b.bairro) as prev_bairro,
-                COALESCE(l.cep, b.cep) as prev_cep,
                 COALESCE(l.uf, b.uf) as prev_uf,
                 COALESCE(l.municipio, b.municipio) as prev_municipio,
                 COALESCE(l.situacao_especial, b.situacao_especial) as prev_situacao_especial,
@@ -602,17 +552,10 @@ def run_change_detection_estabelecimento(cur, ref_month_date, collection_date):
                     stg.situacao_cadastral IS DISTINCT FROM p.prev_situacao_cadastral OR
                     stg.data_situacao_cadastral IS DISTINCT FROM p.prev_data_situacao_cadastral OR
                     stg.motivo_situacao_cadastral IS DISTINCT FROM p.prev_motivo_situacao_cadastral OR
-                    stg.nome_cidade_exterior IS DISTINCT FROM p.prev_nome_cidade_exterior OR
                     stg.pais IS DISTINCT FROM p.prev_pais OR
                     stg.data_inicio_atividade IS DISTINCT FROM p.prev_data_inicio_atividade OR
                     stg.cnae_fiscal_principal IS DISTINCT FROM p.prev_cnae_fiscal_principal OR
                     stg.cnae_fiscal_secundaria IS DISTINCT FROM p.prev_cnae_fiscal_secundaria OR
-                    stg.tipo_logradouro IS DISTINCT FROM p.prev_tipo_logradouro OR
-                    stg.logradouro IS DISTINCT FROM p.prev_logradouro OR
-                    stg.numero IS DISTINCT FROM p.prev_numero OR
-                    stg.complemento IS DISTINCT FROM p.prev_complemento OR
-                    stg.bairro IS DISTINCT FROM p.prev_bairro OR
-                    stg.cep IS DISTINCT FROM p.prev_cep OR
                     stg.uf IS DISTINCT FROM p.prev_uf OR
                     stg.municipio IS DISTINCT FROM p.prev_municipio OR
                     stg.situacao_especial IS DISTINCT FROM p.prev_situacao_especial OR
@@ -624,17 +567,10 @@ def run_change_detection_estabelecimento(cur, ref_month_date, collection_date):
             situacao_cadastral = EXCLUDED.situacao_cadastral,
             data_situacao_cadastral = EXCLUDED.data_situacao_cadastral,
             motivo_situacao_cadastral = EXCLUDED.motivo_situacao_cadastral,
-            nome_cidade_exterior = EXCLUDED.nome_cidade_exterior,
             pais = EXCLUDED.pais,
             data_inicio_atividade = EXCLUDED.data_inicio_atividade,
             cnae_fiscal_principal = EXCLUDED.cnae_fiscal_principal,
             cnae_fiscal_secundaria = EXCLUDED.cnae_fiscal_secundaria,
-            tipo_logradouro = EXCLUDED.tipo_logradouro,
-            logradouro = EXCLUDED.logradouro,
-            numero = EXCLUDED.numero,
-            complemento = EXCLUDED.complemento,
-            bairro = EXCLUDED.bairro,
-            cep = EXCLUDED.cep,
             uf = EXCLUDED.uf,
             municipio = EXCLUDED.municipio,
             situacao_especial = EXCLUDED.situacao_especial,
@@ -668,17 +604,10 @@ def run_change_detection_estabelecimento(cur, ref_month_date, collection_date):
                     'situacao_cadastral', l.situacao_cadastral,
                     'data_situacao_cadastral', l.data_situacao_cadastral,
                     'motivo_situacao_cadastral', l.motivo_situacao_cadastral,
-                    'nome_cidade_exterior', l.nome_cidade_exterior,
                     'pais', l.pais,
                     'data_inicio_atividade', l.data_inicio_atividade,
                     'cnae_fiscal_principal', l.cnae_fiscal_principal,
                     'cnae_fiscal_secundaria', l.cnae_fiscal_secundaria,
-                    'tipo_logradouro', l.tipo_logradouro,
-                    'logradouro', l.logradouro,
-                    'numero', l.numero,
-                    'complemento', l.complemento,
-                    'bairro', l.bairro,
-                    'cep', l.cep,
                     'uf', l.uf,
                     'municipio', l.municipio,
                     'situacao_especial', l.situacao_especial,
@@ -698,17 +627,10 @@ def run_change_detection_estabelecimento(cur, ref_month_date, collection_date):
                     'situacao_cadastral', b.situacao_cadastral,
                     'data_situacao_cadastral', b.data_situacao_cadastral,
                     'motivo_situacao_cadastral', b.motivo_situacao_cadastral,
-                    'nome_cidade_exterior', b.nome_cidade_exterior,
                     'pais', b.pais,
                     'data_inicio_atividade', b.data_inicio_atividade,
                     'cnae_fiscal_principal', b.cnae_fiscal_principal,
                     'cnae_fiscal_secundaria', b.cnae_fiscal_secundaria,
-                    'tipo_logradouro', b.tipo_logradouro,
-                    'logradouro', b.logradouro,
-                    'numero', b.numero,
-                    'complemento', b.complemento,
-                    'bairro', b.bairro,
-                    'cep', b.cep,
                     'uf', b.uf,
                     'municipio', b.municipio,
                     'situacao_especial', b.situacao_especial,
@@ -1058,6 +980,11 @@ def run_tests():
     june_estabelecimento_dir = os.path.join(current_path, "ignored_fields", "estabelecimento", f"reference_month={ref_june}")
     query_june_est = f"SELECT cnpj_basico, cnpj_ordem, cnpj_dv, '{ref_june}'::varchar as reference_month, nome_fantasia, ddd_1, ddd_2, ddd_fax, telefone_1, telefone_2, fax, correio_eletronico FROM test_incremental.staging_estabelecimento"
     export_ignored_fields_parquet(cur, conn, query_june_est, schema_estabelecimento, june_estabelecimento_dir)
+
+    # Export raw address fields to Parquet
+    june_est_addr_dir = os.path.join(current_path, "ignored_fields", "estabelecimento_enderecos", f"reference_month={ref_june}")
+    query_june_est_addr = f"SELECT cnpj_basico, cnpj_ordem, cnpj_dv, '{ref_june}'::varchar as reference_month, tipo_logradouro, logradouro, numero, complemento, bairro, cep, nome_cidade_exterior FROM test_incremental.staging_estabelecimento"
+    export_ignored_fields_parquet(cur, conn, query_june_est_addr, schema_estabelecimento_enderecos, june_est_addr_dir)
     
     # Assertions
     # 1. 12345678 generated UPDATE snapshot
@@ -1073,6 +1000,20 @@ def run_tests():
     
     # 3. Excluded columns validation
     try:
+        cur.execute("SELECT tipo_logradouro FROM test_incremental.latest_state_estabelecimento;")
+        assert False, "tipo_logradouro column should not exist in latest_state_estabelecimento table!"
+    except psycopg2.Error:
+        conn.rollback()
+        print("Success: latest_state_estabelecimento table does not contain detailed address columns.")
+
+    try:
+        cur.execute("SELECT nome_cidade_exterior FROM test_incremental.latest_state_estabelecimento;")
+        assert False, "nome_cidade_exterior column should not exist in latest_state_estabelecimento table!"
+    except psycopg2.Error:
+        conn.rollback()
+        print("Success: latest_state_estabelecimento table does not contain nome_cidade_exterior column.")
+
+    try:
         cur.execute("SELECT nome_fantasia FROM test_incremental.latest_state_estabelecimento;")
         assert False, "nome_fantasia column should not exist in latest_state_estabelecimento table!"
     except psycopg2.Error:
@@ -1083,7 +1024,9 @@ def run_tests():
     for row in cur.fetchall():
         if row[0]:
             assert 'nome_fantasia' not in row[0], "nome_fantasia should not exist in snapshots JSONB conteudo_novo!"
-    print("Success: snapshots JSONB payload does not contain ignored columns.")
+            assert 'tipo_logradouro' not in row[0], "tipo_logradouro should not exist in snapshots JSONB conteudo_novo!"
+            assert 'nome_cidade_exterior' not in row[0], "nome_cidade_exterior should not exist in snapshots JSONB conteudo_novo!"
+    print("Success: snapshots JSONB payload does not contain ignored columns or detailed address fields.")
     
     # 4. Parquet format verification for establishment
     est_parquet_path = os.path.join(june_estabelecimento_dir, "part-000.parquet")
@@ -1099,8 +1042,23 @@ def run_tests():
         col = rg_est.column(c_idx)
         assert col.compression == "SNAPPY", f"Expected SNAPPY compression on {schema_est.names[c_idx]}, got {col.compression}"
     print("Test 19 Success: Establishment Parquet metadata and SNAPPY compression verified.")
+
+    # 5. Parquet format verification for establishment address
+    addr_parquet_path = os.path.join(june_est_addr_dir, "part-000.parquet")
+    assert os.path.exists(addr_parquet_path), "Establishment Address Parquet file not found!"
     
-    print("\nAll 19 test validations passed successfully!")
+    pf_addr = pq.ParquetFile(addr_parquet_path)
+    schema_addr = pf_addr.schema_arrow
+    assert len(schema_addr.names) == 11, f"Expected 11 columns in Address Parquet, got {len(schema_addr.names)}"
+    
+    meta_addr = pf_addr.metadata
+    rg_addr = meta_addr.row_group(0)
+    for c_idx in range(rg_addr.num_columns):
+        col = rg_addr.column(c_idx)
+        assert col.compression == "SNAPPY", f"Expected SNAPPY compression on {schema_addr.names[c_idx]}, got {col.compression}"
+    print("Test Success: Establishment Address Parquet metadata and SNAPPY compression verified.")
+    
+    print("\nAll test validations passed successfully!")
     cur.close()
     conn.close()
 
