@@ -76,21 +76,19 @@ CREATE TABLE IF NOT EXISTS latest_state_estabelecimento (
 
 -- Table for latest state of changed socios
 CREATE TABLE IF NOT EXISTS latest_state_socios (
-    cnpj_basico VARCHAR(8) NOT NULL,
-    nome_socio_razao_social TEXT NOT NULL,
-    identificador_socio INTEGER,
-    cpf_cnpj_socio TEXT,
-    qualificacao_socio INTEGER,
-    data_entrada_sociedade INTEGER,
-    pais INTEGER,
-    representante_legal TEXT,
-    nome_do_representante TEXT,
-    qualificacao_representante_legal INTEGER,
-    faixa_etaria INTEGER,
+    cnpj_basico VARCHAR(8) PRIMARY KEY,
+    qtde_socios INTEGER NOT NULL DEFAULT 0,
+    qtde_socios_pf INTEGER NOT NULL DEFAULT 0,
+    qtde_socios_pj INTEGER NOT NULL DEFAULT 0,
+    qtde_socios_estrangeiro INTEGER NOT NULL DEFAULT 0,
+    min_faixa_etaria INTEGER,
+    max_faixa_etaria INTEGER,
+    data_entrada_antiga INTEGER,
+    data_entrada_recente INTEGER,
+    qtde_administradores INTEGER NOT NULL DEFAULT 0,
     is_deleted BOOLEAN DEFAULT FALSE,
     last_updated_month VARCHAR(7) NOT NULL,
-    data_coleta TIMESTAMP NOT NULL,
-    PRIMARY KEY (cnpj_basico, nome_socio_razao_social)
+    data_coleta TIMESTAMP NOT NULL
 );
 
 -- Table for latest state of changed simples

@@ -942,6 +942,7 @@ def main():
                 'DELETE',
                 %s::varchar,
                 %s::timestamp
+            FROM (
                 SELECT l.cnpj_basico, l.cnpj_ordem, l.cnpj_dv,
                     jsonb_build_object(
                         'cnpj_basico', l.cnpj_basico,
@@ -1023,57 +1024,122 @@ def main():
         # Table: socios
         # ----------------------------------------------------
         print("\nProcessing table: socios")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_stg_socios_pk ON staging_socios(cnpj_basico, nome_socio_razao_social);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_stg_socios_cnpj ON staging_socios(cnpj_basico);")
         conn.commit()
 
         # B. Insert INSERTs and UPDATEs into snapshots
         print("Detecting INSERT and UPDATE events for socios...")
         cur.execute("""
+            WITH stg_agg AS (
+                SELECT
+                    cnpj_basico,
+                    COUNT(*)::int as qtde_socios,
+                    COUNT(CASE WHEN identificador_socio = 2 THEN 1 END)::int as qtde_socios_pf,
+                    COUNT(CASE WHEN identificador_socio = 1 THEN 1 END)::int as qtde_socios_pj,
+                    COUNT(CASE WHEN identificador_socio = 3 THEN 1 END)::int as qtde_socios_estrangeiro,
+                    MIN(NULLIF(faixa_etaria, 0))::int as min_faixa_etaria,
+                    MAX(NULLIF(faixa_etaria, 0))::int as max_faixa_etaria,
+                    MIN(NULLIF(data_entrada_sociedade, 0))::int as data_entrada_antiga,
+                    MAX(NULLIF(data_entrada_sociedade, 0))::int as data_entrada_recente,
+                    COUNT(CASE WHEN qualificacao_socio IN (5, 10, 16, 49) THEN 1 END)::int as qtde_administradores
+                FROM staging_socios
+                GROUP BY cnpj_basico
+            ),
+            baseline_agg AS (
+                SELECT
+                    cnpj_basico,
+                    COUNT(*)::int as qtde_socios,
+                    COUNT(CASE WHEN identificador_socio = 2 THEN 1 END)::int as qtde_socios_pf,
+                    COUNT(CASE WHEN identificador_socio = 1 THEN 1 END)::int as qtde_socios_pj,
+                    COUNT(CASE WHEN identificador_socio = 3 THEN 1 END)::int as qtde_socios_estrangeiro,
+                    MIN(NULLIF(faixa_etaria, 0))::int as min_faixa_etaria,
+                    MAX(NULLIF(faixa_etaria, 0))::int as max_faixa_etaria,
+                    MIN(NULLIF(data_entrada_sociedade, 0))::int as data_entrada_antiga,
+                    MAX(NULLIF(data_entrada_sociedade, 0))::int as data_entrada_recente,
+                    COUNT(CASE WHEN qualificacao_socio IN (5, 10, 16, 49) THEN 1 END)::int as qtde_administradores
+                FROM socios
+                GROUP BY cnpj_basico
+            )
             INSERT INTO snapshots (tabela, cnpj_basico, chave, conteudo_anterior, conteudo_novo, tipo_alteracao, mes_referencia, data_coleta)
             SELECT
                 'socios',
                 stg.cnpj_basico,
-                jsonb_build_object('cnpj_basico', stg.cnpj_basico, 'nome_socio_razao_social', stg.nome_socio_razao_social),
+                jsonb_build_object('cnpj_basico', stg.cnpj_basico),
                 p.old_row,
-                row_to_json(stg)::jsonb,
+                jsonb_build_object(
+                    'cnpj_basico', stg.cnpj_basico,
+                    'qtde_socios', stg.qtde_socios,
+                    'qtde_socios_pf', stg.qtde_socios_pf,
+                    'qtde_socios_pj', stg.qtde_socios_pj,
+                    'qtde_socios_estrangeiro', stg.qtde_socios_estrangeiro,
+                    'min_faixa_etaria', stg.min_faixa_etaria,
+                    'max_faixa_etaria', stg.max_faixa_etaria,
+                    'data_entrada_antiga', stg.data_entrada_antiga,
+                    'data_entrada_recente', stg.data_entrada_recente,
+                    'qtde_administradores', stg.qtde_administradores
+                ),
                 CASE WHEN p.is_new THEN 'INSERT' ELSE 'UPDATE' END,
                 %s::varchar,
                 %s::timestamp
-            FROM staging_socios stg
-            LEFT JOIN latest_state_socios l ON l.cnpj_basico = stg.cnpj_basico AND l.nome_socio_razao_social = stg.nome_socio_razao_social
-            LEFT JOIN socios b ON b.cnpj_basico = stg.cnpj_basico AND b.nome_socio_razao_social = stg.nome_socio_razao_social AND l.cnpj_basico IS NULL
+            FROM stg_agg stg
+            LEFT JOIN latest_state_socios l ON l.cnpj_basico = stg.cnpj_basico
+            LEFT JOIN baseline_agg b ON b.cnpj_basico = stg.cnpj_basico AND l.cnpj_basico IS NULL
             CROSS JOIN LATERAL (
                 SELECT
                     ( (l.cnpj_basico IS NULL AND b.cnpj_basico IS NULL) OR (l.cnpj_basico IS NOT NULL AND l.is_deleted = TRUE) ) as is_new,
                     CASE
-                        WHEN l.cnpj_basico IS NOT NULL THEN (row_to_json(l)::jsonb - 'is_deleted' - 'last_updated_month' - 'data_coleta')
-                        ELSE row_to_json(b)::jsonb
+                        WHEN l.cnpj_basico IS NOT NULL THEN
+                            jsonb_build_object(
+                                'cnpj_basico', l.cnpj_basico,
+                                'qtde_socios', l.qtde_socios,
+                                'qtde_socios_pf', l.qtde_socios_pf,
+                                'qtde_socios_pj', l.qtde_socios_pj,
+                                'qtde_socios_estrangeiro', l.qtde_socios_estrangeiro,
+                                'min_faixa_etaria', l.min_faixa_etaria,
+                                'max_faixa_etaria', l.max_faixa_etaria,
+                                'data_entrada_antiga', l.data_entrada_antiga,
+                                'data_entrada_recente', l.data_entrada_recente,
+                                'qtde_administradores', l.qtde_administradores
+                            )
+                        ELSE
+                            jsonb_build_object(
+                                'cnpj_basico', b.cnpj_basico,
+                                'qtde_socios', b.qtde_socios,
+                                'qtde_socios_pf', b.qtde_socios_pf,
+                                'qtde_socios_pj', b.qtde_socios_pj,
+                                'qtde_socios_estrangeiro', b.qtde_socios_estrangeiro,
+                                'min_faixa_etaria', b.min_faixa_etaria,
+                                'max_faixa_etaria', b.max_faixa_etaria,
+                                'data_entrada_antiga', b.data_entrada_antiga,
+                                'data_entrada_recente', b.data_entrada_recente,
+                                'qtde_administradores', b.qtde_administradores
+                            )
                     END as old_row,
                     COALESCE(l.is_deleted, FALSE) as prev_deleted,
-                    COALESCE(l.identificador_socio, b.identificador_socio) as prev_identificador_socio,
-                    COALESCE(l.cpf_cnpj_socio, b.cpf_cnpj_socio) as prev_cpf_cnpj_socio,
-                    COALESCE(l.qualificacao_socio, b.qualificacao_socio) as prev_qualificacao_socio,
-                    COALESCE(l.data_entrada_sociedade, b.data_entrada_sociedade) as prev_data_entrada_sociedade,
-                    COALESCE(l.pais, b.pais) as prev_pais,
-                    COALESCE(l.representante_legal, b.representante_legal) as prev_representante_legal,
-                    COALESCE(l.nome_do_representante, b.nome_do_representante) as prev_nome_do_representante,
-                    COALESCE(l.qualificacao_representante_legal, b.qualificacao_representante_legal) as prev_qualificacao_representante_legal,
-                    COALESCE(l.faixa_etaria, b.faixa_etaria) as prev_faixa_etaria
+                    COALESCE(l.qtde_socios, b.qtde_socios) as prev_qtde_socios,
+                    COALESCE(l.qtde_socios_pf, b.qtde_socios_pf) as prev_qtde_socios_pf,
+                    COALESCE(l.qtde_socios_pj, b.qtde_socios_pj) as prev_qtde_socios_pj,
+                    COALESCE(l.qtde_socios_estrangeiro, b.qtde_socios_estrangeiro) as prev_qtde_socios_estrangeiro,
+                    COALESCE(l.min_faixa_etaria, b.min_faixa_etaria) as prev_min_faixa_etaria,
+                    COALESCE(l.max_faixa_etaria, b.max_faixa_etaria) as prev_max_faixa_etaria,
+                    COALESCE(l.data_entrada_antiga, b.data_entrada_antiga) as prev_data_entrada_antiga,
+                    COALESCE(l.data_entrada_recente, b.data_entrada_recente) as prev_data_entrada_recente,
+                    COALESCE(l.qtde_administradores, b.qtde_administradores) as prev_qtde_administradores
             ) p
             WHERE
                 p.is_new
                 OR (
                     NOT p.prev_deleted
                     AND (
-                        stg.identificador_socio IS DISTINCT FROM p.prev_identificador_socio OR
-                        stg.cpf_cnpj_socio IS DISTINCT FROM p.prev_cpf_cnpj_socio OR
-                        stg.qualificacao_socio IS DISTINCT FROM p.prev_qualificacao_socio OR
-                        stg.data_entrada_sociedade IS DISTINCT FROM p.prev_data_entrada_sociedade OR
-                        stg.pais IS DISTINCT FROM p.prev_pais OR
-                        stg.representante_legal IS DISTINCT FROM p.prev_representante_legal OR
-                        stg.nome_do_representante IS DISTINCT FROM p.prev_nome_do_representante OR
-                        stg.qualificacao_representante_legal IS DISTINCT FROM p.prev_qualificacao_representante_legal OR
-                        stg.faixa_etaria IS DISTINCT FROM p.prev_faixa_etaria
+                        stg.qtde_socios IS DISTINCT FROM p.prev_qtde_socios OR
+                        stg.qtde_socios_pf IS DISTINCT FROM p.prev_qtde_socios_pf OR
+                        stg.qtde_socios_pj IS DISTINCT FROM p.prev_qtde_socios_pj OR
+                        stg.qtde_socios_estrangeiro IS DISTINCT FROM p.prev_qtde_socios_estrangeiro OR
+                        stg.min_faixa_etaria IS DISTINCT FROM p.prev_min_faixa_etaria OR
+                        stg.max_faixa_etaria IS DISTINCT FROM p.prev_max_faixa_etaria OR
+                        stg.data_entrada_antiga IS DISTINCT FROM p.prev_data_entrada_antiga OR
+                        stg.data_entrada_recente IS DISTINCT FROM p.prev_data_entrada_recente OR
+                        stg.qtde_administradores IS DISTINCT FROM p.prev_qtde_administradores
                     )
                 );
         """, (ref_month_date, collection_date))
@@ -1093,58 +1159,88 @@ def main():
         # C. Upsert changes to latest_state_socios
         print("Updating latest_state_socios lookup table...")
         cur.execute("""
+            WITH stg_agg AS (
+                SELECT
+                    cnpj_basico,
+                    COUNT(*)::int as qtde_socios,
+                    COUNT(CASE WHEN identificador_socio = 2 THEN 1 END)::int as qtde_socios_pf,
+                    COUNT(CASE WHEN identificador_socio = 1 THEN 1 END)::int as qtde_socios_pj,
+                    COUNT(CASE WHEN identificador_socio = 3 THEN 1 END)::int as qtde_socios_estrangeiro,
+                    MIN(NULLIF(faixa_etaria, 0))::int as min_faixa_etaria,
+                    MAX(NULLIF(faixa_etaria, 0))::int as max_faixa_etaria,
+                    MIN(NULLIF(data_entrada_sociedade, 0))::int as data_entrada_antiga,
+                    MAX(NULLIF(data_entrada_sociedade, 0))::int as data_entrada_recente,
+                    COUNT(CASE WHEN qualificacao_socio IN (5, 10, 16, 49) THEN 1 END)::int as qtde_administradores
+                FROM staging_socios
+                GROUP BY cnpj_basico
+            ),
+            baseline_agg AS (
+                SELECT
+                    cnpj_basico,
+                    COUNT(*)::int as qtde_socios,
+                    COUNT(CASE WHEN identificador_socio = 2 THEN 1 END)::int as qtde_socios_pf,
+                    COUNT(CASE WHEN identificador_socio = 1 THEN 1 END)::int as qtde_socios_pj,
+                    COUNT(CASE WHEN identificador_socio = 3 THEN 1 END)::int as qtde_socios_estrangeiro,
+                    MIN(NULLIF(faixa_etaria, 0))::int as min_faixa_etaria,
+                    MAX(NULLIF(faixa_etaria, 0))::int as max_faixa_etaria,
+                    MIN(NULLIF(data_entrada_sociedade, 0))::int as data_entrada_antiga,
+                    MAX(NULLIF(data_entrada_sociedade, 0))::int as data_entrada_recente,
+                    COUNT(CASE WHEN qualificacao_socio IN (5, 10, 16, 49) THEN 1 END)::int as qtde_administradores
+                FROM socios
+                GROUP BY cnpj_basico
+            )
             INSERT INTO latest_state_socios (
-                cnpj_basico, nome_socio_razao_social, identificador_socio, cpf_cnpj_socio, qualificacao_socio,
-                data_entrada_sociedade, pais, representante_legal, nome_do_representante, qualificacao_representante_legal,
-                faixa_etaria, is_deleted, last_updated_month, data_coleta
+                cnpj_basico, qtde_socios, qtde_socios_pf, qtde_socios_pj, qtde_socios_estrangeiro,
+                min_faixa_etaria, max_faixa_etaria, data_entrada_antiga, data_entrada_recente,
+                qtde_administradores, is_deleted, last_updated_month, data_coleta
             )
             SELECT
-                stg.cnpj_basico, stg.nome_socio_razao_social, stg.identificador_socio, stg.cpf_cnpj_socio, stg.qualificacao_socio,
-                stg.data_entrada_sociedade, stg.pais, stg.representante_legal, stg.nome_do_representante, stg.qualificacao_representante_legal,
-                stg.faixa_etaria, FALSE, %s::varchar, %s::timestamp
-            FROM staging_socios stg
-            LEFT JOIN latest_state_socios l ON l.cnpj_basico = stg.cnpj_basico AND l.nome_socio_razao_social = stg.nome_socio_razao_social
-            LEFT JOIN socios b ON b.cnpj_basico = stg.cnpj_basico AND b.nome_socio_razao_social = stg.nome_socio_razao_social AND l.cnpj_basico IS NULL
+                stg.cnpj_basico, stg.qtde_socios, stg.qtde_socios_pf, stg.qtde_socios_pj, stg.qtde_socios_estrangeiro,
+                stg.min_faixa_etaria, stg.max_faixa_etaria, stg.data_entrada_antiga, stg.data_entrada_recente,
+                stg.qtde_administradores, FALSE, %s::varchar, %s::timestamp
+            FROM stg_agg stg
+            LEFT JOIN latest_state_socios l ON l.cnpj_basico = stg.cnpj_basico
+            LEFT JOIN baseline_agg b ON b.cnpj_basico = stg.cnpj_basico AND l.cnpj_basico IS NULL
             CROSS JOIN LATERAL (
                 SELECT
                     ( (l.cnpj_basico IS NULL AND b.cnpj_basico IS NULL) OR (l.cnpj_basico IS NOT NULL AND l.is_deleted = TRUE) ) as is_new,
                     COALESCE(l.is_deleted, FALSE) as prev_deleted,
-                    COALESCE(l.identificador_socio, b.identificador_socio) as prev_identificador_socio,
-                    COALESCE(l.cpf_cnpj_socio, b.cpf_cnpj_socio) as prev_cpf_cnpj_socio,
-                    COALESCE(l.qualificacao_socio, b.qualificacao_socio) as prev_qualificacao_socio,
-                    COALESCE(l.data_entrada_sociedade, b.data_entrada_sociedade) as prev_data_entrada_sociedade,
-                    COALESCE(l.pais, b.pais) as prev_pais,
-                    COALESCE(l.representante_legal, b.representante_legal) as prev_representante_legal,
-                    COALESCE(l.nome_do_representante, b.nome_do_representante) as prev_nome_do_representante,
-                    COALESCE(l.qualificacao_representante_legal, b.qualificacao_representante_legal) as prev_qualificacao_representante_legal,
-                    COALESCE(l.faixa_etaria, b.faixa_etaria) as prev_faixa_etaria
+                    COALESCE(l.qtde_socios, b.qtde_socios) as prev_qtde_socios,
+                    COALESCE(l.qtde_socios_pf, b.qtde_socios_pf) as prev_qtde_socios_pf,
+                    COALESCE(l.qtde_socios_pj, b.qtde_socios_pj) as prev_qtde_socios_pj,
+                    COALESCE(l.qtde_socios_estrangeiro, b.qtde_socios_estrangeiro) as prev_qtde_socios_estrangeiro,
+                    COALESCE(l.min_faixa_etaria, b.min_faixa_etaria) as prev_min_faixa_etaria,
+                    COALESCE(l.max_faixa_etaria, b.max_faixa_etaria) as prev_max_faixa_etaria,
+                    COALESCE(l.data_entrada_antiga, b.data_entrada_antiga) as prev_data_entrada_antiga,
+                    COALESCE(l.data_entrada_recente, b.data_entrada_recente) as prev_data_entrada_recente,
+                    COALESCE(l.qtde_administradores, b.qtde_administradores) as prev_qtde_administradores
             ) p
             WHERE
                 p.is_new
                 OR (
                     NOT p.prev_deleted
                     AND (
-                        stg.identificador_socio IS DISTINCT FROM p.prev_identificador_socio OR
-                        stg.cpf_cnpj_socio IS DISTINCT FROM p.prev_cpf_cnpj_socio OR
-                        stg.qualificacao_socio IS DISTINCT FROM p.prev_qualificacao_socio OR
-                        stg.data_entrada_sociedade IS DISTINCT FROM p.prev_data_entrada_sociedade OR
-                        stg.pais IS DISTINCT FROM p.prev_pais OR
-                        stg.representante_legal IS DISTINCT FROM p.prev_representante_legal OR
-                        stg.nome_do_representante IS DISTINCT FROM p.prev_nome_do_representante OR
-                        stg.qualificacao_representante_legal IS DISTINCT FROM p.prev_qualificacao_representante_legal OR
-                        stg.faixa_etaria IS DISTINCT FROM p.prev_faixa_etaria
+                        stg.qtde_socios IS DISTINCT FROM p.prev_qtde_socios OR
+                        stg.qtde_socios_pf IS DISTINCT FROM p.prev_qtde_socios_pf OR
+                        stg.qtde_socios_pj IS DISTINCT FROM p.prev_qtde_socios_pj OR
+                        stg.qtde_socios_estrangeiro IS DISTINCT FROM p.prev_qtde_socios_estrangeiro OR
+                        stg.min_faixa_etaria IS DISTINCT FROM p.prev_min_faixa_etaria OR
+                        stg.max_faixa_etaria IS DISTINCT FROM p.prev_max_faixa_etaria OR
+                        stg.data_entrada_antiga IS DISTINCT FROM p.prev_data_entrada_antiga OR
+                        stg.data_entrada_recente IS DISTINCT FROM p.prev_data_entrada_recente OR
+                        stg.qtde_administradores IS DISTINCT FROM p.prev_qtde_administradores
                     )
                 )
-            ON CONFLICT (cnpj_basico, nome_socio_razao_social) DO UPDATE SET
-                identificador_socio = EXCLUDED.identificador_socio,
-                cpf_cnpj_socio = EXCLUDED.cpf_cnpj_socio,
-                qualificacao_socio = EXCLUDED.qualificacao_socio,
-                data_entrada_sociedade = EXCLUDED.data_entrada_sociedade,
-                pais = EXCLUDED.pais,
-                representante_legal = EXCLUDED.representante_legal,
-                nome_do_representante = EXCLUDED.nome_do_representante,
-                qualificacao_representante_legal = EXCLUDED.qualificacao_representante_legal,
-                faixa_etaria = EXCLUDED.faixa_etaria,
+            ON CONFLICT (cnpj_basico) DO UPDATE SET
+                qtde_socios = EXCLUDED.qtde_socios,
+                qtde_socios_pf = EXCLUDED.qtde_socios_pf,
+                qtde_socios_pj = EXCLUDED.qtde_socios_pj,
+                qtde_socios_estrangeiro = EXCLUDED.qtde_socios_estrangeiro,
+                min_faixa_etaria = EXCLUDED.min_faixa_etaria,
+                max_faixa_etaria = EXCLUDED.max_faixa_etaria,
+                data_entrada_antiga = EXCLUDED.data_entrada_antiga,
+                data_entrada_recente = EXCLUDED.data_entrada_recente,
+                qtde_administradores = EXCLUDED.qtde_administradores,
                 is_deleted = FALSE,
                 last_updated_month = EXCLUDED.last_updated_month,
                 data_coleta = EXCLUDED.data_coleta;
@@ -1153,27 +1249,71 @@ def main():
         # D. Deletions
         print("Detecting DELETEs for socios...")
         cur.execute("""
+            WITH stg_agg AS (
+                SELECT cnpj_basico
+                FROM staging_socios
+                GROUP BY cnpj_basico
+            ),
+            baseline_agg AS (
+                SELECT
+                    cnpj_basico,
+                    COUNT(*)::int as qtde_socios,
+                    COUNT(CASE WHEN identificador_socio = 2 THEN 1 END)::int as qtde_socios_pf,
+                    COUNT(CASE WHEN identificador_socio = 1 THEN 1 END)::int as qtde_socios_pj,
+                    COUNT(CASE WHEN identificador_socio = 3 THEN 1 END)::int as qtde_socios_estrangeiro,
+                    MIN(NULLIF(faixa_etaria, 0))::int as min_faixa_etaria,
+                    MAX(NULLIF(faixa_etaria, 0))::int as max_faixa_etaria,
+                    MIN(NULLIF(data_entrada_sociedade, 0))::int as data_entrada_antiga,
+                    MAX(NULLIF(data_entrada_sociedade, 0))::int as data_entrada_recente,
+                    COUNT(CASE WHEN qualificacao_socio IN (5, 10, 16, 49) THEN 1 END)::int as qtde_administradores
+                FROM socios
+                GROUP BY cnpj_basico
+            )
             INSERT INTO snapshots (tabela, cnpj_basico, chave, conteudo_anterior, conteudo_novo, tipo_alteracao, mes_referencia, data_coleta)
             SELECT
                 'socios',
                 prev.cnpj_basico,
-                jsonb_build_object('cnpj_basico', prev.cnpj_basico, 'nome_socio_razao_social', prev.nome_socio_razao_social),
+                jsonb_build_object('cnpj_basico', prev.cnpj_basico),
                 prev.old_row,
                 NULL,
                 'DELETE',
                 %s::varchar,
                 %s::timestamp
             FROM (
-                SELECT l.cnpj_basico, l.nome_socio_razao_social, (row_to_json(l)::jsonb - 'is_deleted' - 'last_updated_month' - 'data_coleta') as old_row
+                SELECT l.cnpj_basico,
+                    jsonb_build_object(
+                        'cnpj_basico', l.cnpj_basico,
+                        'qtde_socios', l.qtde_socios,
+                        'qtde_socios_pf', l.qtde_socios_pf,
+                        'qtde_socios_pj', l.qtde_socios_pj,
+                        'qtde_socios_estrangeiro', l.qtde_socios_estrangeiro,
+                        'min_faixa_etaria', l.min_faixa_etaria,
+                        'max_faixa_etaria', l.max_faixa_etaria,
+                        'data_entrada_antiga', l.data_entrada_antiga,
+                        'data_entrada_recente', l.data_entrada_recente,
+                        'qtde_administradores', l.qtde_administradores
+                    ) as old_row
                 FROM latest_state_socios l
-                LEFT JOIN staging_socios stg ON stg.cnpj_basico = l.cnpj_basico AND stg.nome_socio_razao_social = l.nome_socio_razao_social
+                LEFT JOIN stg_agg stg ON stg.cnpj_basico = l.cnpj_basico
                 WHERE l.is_deleted = FALSE
                   AND stg.cnpj_basico IS NULL
                 UNION ALL
-                SELECT b.cnpj_basico, b.nome_socio_razao_social, row_to_json(b)::jsonb as old_row
-                FROM socios b
-                LEFT JOIN latest_state_socios l ON l.cnpj_basico = b.cnpj_basico AND l.nome_socio_razao_social = b.nome_socio_razao_social
-                LEFT JOIN staging_socios stg ON stg.cnpj_basico = b.cnpj_basico AND stg.nome_socio_razao_social = b.nome_socio_razao_social
+                SELECT b.cnpj_basico,
+                    jsonb_build_object(
+                        'cnpj_basico', b.cnpj_basico,
+                        'qtde_socios', b.qtde_socios,
+                        'qtde_socios_pf', b.qtde_socios_pf,
+                        'qtde_socios_pj', b.qtde_socios_pj,
+                        'qtde_socios_estrangeiro', b.qtde_socios_estrangeiro,
+                        'min_faixa_etaria', b.min_faixa_etaria,
+                        'max_faixa_etaria', b.max_faixa_etaria,
+                        'data_entrada_antiga', b.data_entrada_antiga,
+                        'data_entrada_recente', b.data_entrada_recente,
+                        'qtde_administradores', b.qtde_administradores
+                    ) as old_row
+                FROM baseline_agg b
+                LEFT JOIN latest_state_socios l ON l.cnpj_basico = b.cnpj_basico
+                LEFT JOIN stg_agg stg ON stg.cnpj_basico = b.cnpj_basico
                 WHERE l.cnpj_basico IS NULL
                   AND stg.cnpj_basico IS NULL
             ) prev;
@@ -1184,24 +1324,34 @@ def main():
         # Mark deleted records in latest_state_socios
         if soc_deletes > 0:
             cur.execute("""
-                INSERT INTO latest_state_socios (cnpj_basico, nome_socio_razao_social, is_deleted, last_updated_month, data_coleta)
+                WITH stg_agg AS (
+                    SELECT cnpj_basico
+                    FROM staging_socios
+                    GROUP BY cnpj_basico
+                ),
+                baseline_agg AS (
+                    SELECT cnpj_basico
+                    FROM socios
+                    GROUP BY cnpj_basico
+                )
+                INSERT INTO latest_state_socios (cnpj_basico, is_deleted, last_updated_month, data_coleta)
                 SELECT
-                    prev.cnpj_basico, prev.nome_socio_razao_social, TRUE, %s::varchar, %s::timestamp
+                    prev.cnpj_basico, TRUE, %s::varchar, %s::timestamp
                 FROM (
-                    SELECT l.cnpj_basico, l.nome_socio_razao_social
+                    SELECT l.cnpj_basico
                     FROM latest_state_socios l
-                    LEFT JOIN staging_socios stg ON stg.cnpj_basico = l.cnpj_basico AND stg.nome_socio_razao_social = l.nome_socio_razao_social
+                    LEFT JOIN stg_agg stg ON stg.cnpj_basico = l.cnpj_basico
                     WHERE l.is_deleted = FALSE
                       AND stg.cnpj_basico IS NULL
                     UNION
-                    SELECT DISTINCT b.cnpj_basico, b.nome_socio_razao_social
-                    FROM socios b
-                    LEFT JOIN latest_state_socios l ON l.cnpj_basico = b.cnpj_basico AND l.nome_socio_razao_social = b.nome_socio_razao_social
-                    LEFT JOIN staging_socios stg ON stg.cnpj_basico = b.cnpj_basico AND stg.nome_socio_razao_social = b.nome_socio_razao_social
+                    SELECT DISTINCT b.cnpj_basico
+                    FROM baseline_agg b
+                    LEFT JOIN latest_state_socios l ON l.cnpj_basico = b.cnpj_basico
+                    LEFT JOIN stg_agg stg ON stg.cnpj_basico = b.cnpj_basico
                     WHERE l.cnpj_basico IS NULL
                       AND stg.cnpj_basico IS NULL
                 ) prev
-                ON CONFLICT (cnpj_basico, nome_socio_razao_social) DO UPDATE SET
+                ON CONFLICT (cnpj_basico) DO UPDATE SET
                     is_deleted = TRUE,
                     last_updated_month = EXCLUDED.last_updated_month,
                     data_coleta = EXCLUDED.data_coleta;

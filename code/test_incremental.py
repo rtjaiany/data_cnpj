@@ -136,11 +136,19 @@ def setup_test_schema(cur):
         );
         
         CREATE TABLE test_incremental.latest_state_socios (
-            LIKE test_incremental.socios,
+            cnpj_basico VARCHAR(8) PRIMARY KEY,
+            qtde_socios INTEGER NOT NULL DEFAULT 0,
+            qtde_socios_pf INTEGER NOT NULL DEFAULT 0,
+            qtde_socios_pj INTEGER NOT NULL DEFAULT 0,
+            qtde_socios_estrangeiro INTEGER NOT NULL DEFAULT 0,
+            min_faixa_etaria INTEGER,
+            max_faixa_etaria INTEGER,
+            data_entrada_antiga INTEGER,
+            data_entrada_recente INTEGER,
+            qtde_administradores INTEGER NOT NULL DEFAULT 0,
             is_deleted BOOLEAN DEFAULT FALSE,
             last_updated_month VARCHAR(7) NOT NULL,
-            data_coleta TIMESTAMP NOT NULL,
-            PRIMARY KEY (cnpj_basico, nome_socio_razao_social)
+            data_coleta TIMESTAMP NOT NULL
         );
         
         CREATE TABLE test_incremental.latest_state_simples (
