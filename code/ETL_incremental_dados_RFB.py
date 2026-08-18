@@ -25,7 +25,7 @@ def psql_insert_copy(cur, table_name, df_iter, keys):
     writer.writerows(df_iter)
     s_buf.seek(0)
     columns = ", ".join([f'"{k}"' for k in keys])
-    sql = f'COPY {table_name} ({columns}) FROM STDIN WITH CSV'
+    sql = f'COPY {table_name} ({columns}) FROM STDIN WITH CSV NULL ' + r"'\N'"
     cur.copy_expert(sql=sql, file=s_buf)
 
 # Chunked loading from CSV directly into staging
@@ -57,8 +57,8 @@ def load_csv_to_staging(cur, file_path, table_name, dtypes, columns, delimiter="
             # Ensure nome_socio_razao_social is never NaN/NULL to prevent primary key constraint violations
             chunk["nome_socio_razao_social"] = chunk["nome_socio_razao_social"].fillna("")
             
-        # Convert to object and replace nulls with None to output correct empty strings for NULLs
-        chunk = chunk.astype(object).where(pd.notnull(chunk), None)
+        # Convert to object and replace nulls with '\N' to output correct empty strings for NULLs
+        chunk = chunk.astype(object).where(pd.notnull(chunk), r"\N")
 
         # Convert to list of tuples for COPY
         data_iter = [tuple(x) for x in chunk.itertuples(index=False)]
