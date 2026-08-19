@@ -76,7 +76,7 @@ BEGIN
     WITH RECURSIVE month_list AS (
         SELECT TO_DATE(start_month || '-01', 'YYYY-MM-DD') AS m_date
         UNION ALL
-        SELECT m_date + INTERVAL '1 month'
+        SELECT (m_date + INTERVAL '1 month')::date
         FROM month_list
         WHERE m_date < TO_DATE(end_month || '-01', 'YYYY-MM-DD')
     )
@@ -86,7 +86,7 @@ BEGIN
     DROP TABLE IF EXISTS temp_current_state;
     
     CREATE TEMP TABLE temp_current_state AS
-    SELECT
+    SELECT DISTINCT ON (est.cnpj_basico, est.cnpj_ordem, est.cnpj_dv)
         est.cnpj_basico,
         est.cnpj_ordem,
         est.cnpj_dv,
@@ -140,7 +140,8 @@ BEGIN
         FROM public.socios
         GROUP BY cnpj_basico
     ) soc ON soc.cnpj_basico = est.cnpj_basico
-    WHERE (state_filter IS NULL OR est.uf = state_filter);
+    WHERE (state_filter IS NULL OR est.uf = state_filter)
+    ORDER BY est.cnpj_basico, est.cnpj_ordem, est.cnpj_dv, est.situacao_cadastral DESC NULLS LAST;
 
     CREATE UNIQUE INDEX ON temp_current_state (cnpj_basico, cnpj_ordem, cnpj_dv);
     CREATE INDEX ON temp_current_state (cnpj_basico);
