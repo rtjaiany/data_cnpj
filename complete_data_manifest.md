@@ -316,16 +316,16 @@ Partners were grouped and aggregated on `cnpj_basico` before joining.
 
 The validated analytical state defines the structural vector of the firm:
 
-$$\text{AnalyticalState}(record) = \{ \text{situacao\_cadastral}, \text{cnae\_fiscal\_principal}, \text{uf}, \text{municipio}, \text{capital\_social}, \text{natureza\_juridica}, \text{porte\_empresa}, \text{opcao\_pelo\_simples}, \text{opcao\_mei}, \text{qtde\_socios} \}$$
+`AnalyticalState(record) = { situacao_cadastral, cnae_fiscal_principal, uf, municipio, capital_social, natureza_juridica, porte_empresa, opcao_pelo_simples, opcao_mei, qtde_socios }`
 
 ---
 
 ## 18. Analytical Event Definition
 
-- **INSERT:** $\text{key} \in \text{Later} \land \text{key} \notin \text{Earlier}$
-- **DELETE:** $\text{key} \in \text{Earlier} \land \text{key} \notin \text{Later}$
-- **UPDATE:** $\text{key} \in \text{Earlier} \cap \text{Later} \land \text{AnalyticalState(Earlier)} \neq \text{AnalyticalState(Later)}$
-- **NO CHANGE:** $\text{key} \in \text{Earlier} \cap \text{Later} \land \text{AnalyticalState(Earlier)} = \text{AnalyticalState(Later)}$
+- **INSERT:** `key ∈ Later AND key ∉ Earlier`
+- **DELETE:** `key ∈ Earlier AND key ∉ Later`
+- **UPDATE:** `key ∈ Earlier ∩ Later AND AnalyticalState(Earlier) ≠ AnalyticalState(Later)`
+- **NO CHANGE:** `key ∈ Earlier ∩ Later AND AnalyticalState(Earlier) = AnalyticalState(Later)`
 
 ---
 
@@ -383,13 +383,13 @@ Deletes are exactly **0** in both transitions. In the RFB registry, closed firms
 
 ### May → June:
 
-- $\text{NextRows} = \text{PreviousRows} + \text{Inserts} - \text{Deletes} \implies 16,253,954 + 92,213 - 0 = 16,346,167$ (Reconciled)
-- $\text{PreviousRows} = \text{Deletes} + \text{Updates} + \text{NoChange} \implies 0 + 217,115 + 16,036,839 = 16,253,954$ (Reconciled)
+- `NextRows = PreviousRows + Inserts - Deletes => 16,253,954 + 92,213 - 0 = 16,346,167` (Reconciled)
+- `PreviousRows = Deletes + Updates + NoChange => 0 + 217,115 + 16,036,839 = 16,253,954` (Reconciled)
 
 ### June → July:
 
-- $\text{NextRows} = \text{PreviousRows} + \text{Inserts} - \text{Deletes} \implies 16,346,167 + 98,544 - 0 = 16,444,711$ (Reconciled)
-- $\text{PreviousRows} = \text{Deletes} + \text{Updates} + \text{NoChange} \implies 0 + 133,300 + 16,212,867 = 16,346,167$ (Reconciled)
+- `NextRows = PreviousRows + Inserts - Deletes => 16,346,167 + 98,544 - 0 = 16,444,711` (Reconciled)
+- `PreviousRows = Deletes + Updates + NoChange => 0 + 133,300 + 16,212,867 = 16,346,167` (Reconciled)
 
 ---
 

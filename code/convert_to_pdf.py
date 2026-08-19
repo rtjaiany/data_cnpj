@@ -39,8 +39,8 @@ def main():
 <meta charset="utf-8">
 <style>
     @page {{
-        size: A4 portrait;
-        margin: 2.2cm 2cm 2.2cm 2cm;
+        size: A4 landscape;
+        margin: 1.5cm;
     }}
     body {{
         font-family: Helvetica, Arial, sans-serif;
@@ -90,9 +90,9 @@ def main():
     }}
     th, td {{
         border: 1px solid #cbd5e0;
-        padding: 6px 8px;
+        padding: 4px 6px;
         text-align: left;
-        font-size: 8pt;
+        font-size: 7.5pt;
     }}
     th {{
         background-color: #ebf8ff;
