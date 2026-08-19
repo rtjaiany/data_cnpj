@@ -711,6 +711,39 @@ def main():
         # ----------------------------------------------------
         # Table: estabelecimento
         # ----------------------------------------------------
+        print("\nProcessing table: estabelecimento")
+        
+        # A. Deduplicate staging_estabelecimento using non-NULL count and tie-breaker ordering
+        print("Deduplicating staging_estabelecimento...")
+        cur.execute("DROP TABLE IF EXISTS staging_estabelecimento_dedup;")
+        cur.execute("""
+            CREATE TABLE staging_estabelecimento_dedup AS
+            WITH ranked AS (
+                SELECT *,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY cnpj_basico, cnpj_ordem, cnpj_dv
+                           ORDER BY
+                               (
+                                   (situacao_cadastral IS NOT NULL)::int +
+                                   (data_situacao_cadastral IS NOT NULL AND data_situacao_cadastral != 0)::int +
+                                   (cnae_fiscal_principal IS NOT NULL)::int +
+                                   (uf IS NOT NULL)::int +
+                                   (municipio IS NOT NULL)::int
+                               ) DESC,
+                               situacao_cadastral DESC NULLS LAST,
+                               data_inicio_atividade DESC NULLS LAST
+                       ) as rn
+                FROM staging_estabelecimento
+            )
+            SELECT cnpj_basico, cnpj_ordem, cnpj_dv, identificador_matriz_filial, nome_fantasia, situacao_cadastral, data_situacao_cadastral, motivo_situacao_cadastral, nome_cidade_exterior, pais, data_inicio_atividade, cnae_fiscal_principal, cnae_fiscal_secundaria, tipo_logradouro, logradouro, numero, complemento, bairro, cep, uf, municipio, ddd_1, telefone_1, ddd_2, telefone_2, ddd_fax, fax, correio_eletronico, situacao_especial, data_situacao_especial
+            FROM ranked
+            WHERE rn = 1;
+        """)
+        cur.execute("DROP TABLE staging_estabelecimento;")
+        cur.execute("ALTER TABLE staging_estabelecimento_dedup RENAME TO staging_estabelecimento;")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_stg_estabelecimento_pk ON staging_estabelecimento(cnpj_basico, cnpj_ordem, cnpj_dv);")
+        conn.commit()
+
         # Export ignored fields to partitioned Parquet for the current month
         print("Exporting ignored fields for estabelecimento to Parquet...")
         query_est = f"SELECT cnpj_basico, cnpj_ordem, cnpj_dv, '{data_folder}'::varchar as reference_month, nome_fantasia, ddd_1, ddd_2, ddd_fax, telefone_1, telefone_2, fax, correio_eletronico FROM staging_estabelecimento"
@@ -1361,6 +1394,34 @@ def main():
         # Table: simples
         # ----------------------------------------------------
         print("\nProcessing table: simples")
+        
+        # A. Deduplicate staging_simples using non-NULL count and tie-breaker ordering
+        print("Deduplicating staging_simples...")
+        cur.execute("DROP TABLE IF EXISTS staging_simples_dedup;")
+        cur.execute("""
+            CREATE TABLE staging_simples_dedup AS
+            WITH ranked AS (
+                SELECT *,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY cnpj_basico
+                           ORDER BY
+                               (
+                                   (opcao_pelo_simples IS NOT NULL)::int +
+                                   (data_opcao_simples IS NOT NULL AND data_opcao_simples != 0)::int +
+                                   (opcao_mei IS NOT NULL)::int +
+                                   (data_opcao_mei IS NOT NULL AND data_opcao_mei != 0)::int
+                               ) DESC,
+                               opcao_pelo_simples DESC NULLS LAST,
+                               opcao_mei DESC NULLS LAST
+                       ) as rn
+                FROM staging_simples
+            )
+            SELECT cnpj_basico, opcao_pelo_simples, data_opcao_simples, data_exclusao_simples, opcao_mei, data_opcao_mei, data_exclusao_mei
+            FROM ranked
+            WHERE rn = 1;
+        """)
+        cur.execute("DROP TABLE staging_simples;")
+        cur.execute("ALTER TABLE staging_simples_dedup RENAME TO staging_simples;")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_stg_simples_pk ON staging_simples(cnpj_basico);")
         conn.commit()
 
