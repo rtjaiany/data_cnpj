@@ -139,3 +139,4 @@ dmypy.json
 /old/OUTPUT_FILES/
 /old/EXTRACTED_FILES/
 *.csv
+/reconstructed_panel/
