@@ -140,3 +140,4 @@ dmypy.json
 /old/EXTRACTED_FILES/
 *.csv
 /reconstructed_panel/
+*.pdf
