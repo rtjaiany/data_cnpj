@@ -4,7 +4,7 @@ An enterprise-grade, relational data pipeline built on **PostgreSQL** and **Pyth
 
 ---
 
-## 🏛️ Project Architecture & Contributions
+### 🏛️ Project Architecture & Contributions
 
 This repository represents the collaborative evolution of a database framework designed to transform raw administrative data dumps into a reliable longitudinal panel dataset.
 
@@ -17,10 +17,10 @@ This repository represents the collaborative evolution of a database framework d
 ### 🔸 2. Temporal Reconstruction & Analytical Framework (Developed by @rtjaiany)
 
 - **Schema `analytics` Layout:** A sandboxed analytical schema created to support reproducible panel generation for temporal and business intelligence research without modifying the core production tables.
-- **Procedure `analytics.reconstruct_temporal_data()`:** A reverse-chronological batch engine that starts from the June 2026 database baseline and steps backward through months (`2023-12` down to `2023-05`), applying the delta events in `snapshots` to reconstruct correct historical states.
-- **PII Hashing & Security:** Integration of secure `SHA-256` hashing functions to anonymize names, CPFs, and contact details in compliance with Brazilian General Data Protection Law (LGPD).
-- **Gaps & Islands Compression:** A state-reduction routine (`analytics.compress_longitudinal_intervals`) that compresses hundreds of millions of redundant monthly records into a compact event-history format containing active validity intervals (`valid_from_month` to `valid_to_month`).
-- **Transition Trackers:** Database procedures to output detailed mutation audits for key variables (CNAE, municipality, status, Simples/MEI status).
+- **Procedure `analytics.reconstruct_panel()`:** A forward-chronological batch engine that initializes a baseline state (e.g., `2023-05`), applies the monthly delta updates from `snapshots` sequentially, and builds a comprehensive, unified establishment-level panel.
+- **Null Minimization Deduplication:** Implementation of a CTE-based window function that scores duplicate staging records by completeness (fewer null values) during ingestion, ensuring constraint integrity without information loss.
+- **Parquet Streaming Pipeline:** An optimized PyArrow script that streams the reconstructed panel from PostgreSQL and writes it chunk-by-chunk to Snappy compressed partitioned Parquet files for high-speed downstream analytics.
+- **Technical Manifest & PDF Compiler:** A document detailing the entire data dictionary, coverage statistics, and reconciliation counts (`complete_data_manifest.md`), with an automated PDF generation utility.
 
 ---
 
@@ -28,14 +28,27 @@ This repository represents the collaborative evolution of a database framework d
 
 ```
 ├── code/
-│   ├── ETL_coletar_dados_e_gravar_BD.py  # [Afonso] Ingests full RFB dumps
-│   ├── ETL_incremental_dados_RFB.py     # [Afonso] Incremental snapshot logger
-│   ├── banco_de_dados.sql               # [Afonso] Production schema definition
-│   ├── reconstruct_analytics.sql        # [rtjaiany] Reconstruction & Analytics SQL layer
-│   └── export_csv.py                    # [rtjaiany] Pipeline export pipeline to CSV
-├── Dados_RFB_ERD.png                    # Entity-Relationship Diagram (ERD)
+│   ├── ETL_coletar_dados_e_gravar_BD.py  # Ingests full RFB dumps [Afonso]
+│   ├── ETL_incremental_dados_RFB.py     # Incremental snapshot logger with deduplication [Afonso]
+│   ├── banco_de_dados.sql               # Production schema definition [Afonso]
+│   ├── snapshots.sql                    # Snapshot tables and logs setup [Afonso]
+│   ├── test_incremental.py              # Incremental parsing test framework [Afonso]
+│   ├── reconstruct_panel.sql            # Forward longitudinal reconstruction query [rtjaiany]
+│   ├── export_panel_parquet.py          # Streams panel data to Snappy partitioned Parquet [rtjaiany]
+│   ├── convert_to_pdf.py                # Compiles markdown reports to formatted PDF [rtjaiany]
+│   └── .env_template                    # Environment variables template
+├── old/                                 # Legacy scripts and SQL queries
+│   ├── ETL_incremental_dados_RFB.py     # Pre-deduplication incremental ETL script
+│   ├── export_csv.py                    # Obsolete CSV export script
+│   ├── reconstruct_analytics.sql        # Legacy analytical reconstruction procedure
+│   └── run_range_updates.py             # Obsolete range update script
+├── docs/                                # Diagrams and layout guides
+│   ├── Dados_RFB_ERD.png                # Entity-Relationship Diagram
+│   ├── ERD_Dados_RFB.pgerd              # PostgreSQL ERD layout source
+│   └── NOVOLAYOUTDOSDADOSABERTOSDOCNPJ.pdf # Official RFB file layout guide
+├── complete_data_manifest.md            # Comprehensive project manifest, dictionary, and lineage report
 ├── requirements.txt                     # Python dependency list
-└── README.md                            # Documentation
+└── README.md                            # Project documentation
 ```
 
 ---
@@ -45,7 +58,7 @@ This repository represents the collaborative evolution of a database framework d
 ### Prerequisites
 
 - Python 3.8+
-- PostgreSQL 14.2+ (with `pgcrypto` extension for SHA-256 hashing)
+- PostgreSQL 14.2+ (with `pgcrypto` extension for hashing)
 
 ### 1. Database Setup & Ingestion (Afonso's Layer)
 
@@ -71,39 +84,42 @@ This repository represents the collaborative evolution of a database framework d
 
 ### 2. Historical Reconstruction & Analytics (rtjaiany's Layer)
 
-1. Compile the analytical procedures in your database:
+1. Compile the analytical reconstruction procedure:
     ```bash
-    psql -h localhost -U postgres -d cnpj -f code/reconstruct_analytics.sql
+    psql -h localhost -U postgres -d cnpj -f code/reconstruct_panel.sql
     ```
-2. Execute the reconstruction process:
+2. Execute the forward temporal reconstruction process (e.g., from May 2023 to July 2023 for São Paulo):
     ```bash
-    psql -h localhost -U postgres -d cnpj -c "CALL analytics.reconstruct_temporal_data();"
+    psql -h localhost -U postgres -d cnpj -c "CALL analytics.reconstruct_panel('2023-05', '2023-07', 'SP');"
     ```
-    _This will run the reverse chronological loop, resolve transition tables, apply PII hashes, and construct the Gaps & Islands longitudinal compression._
-3. Execute the Gaps & Islands compression:
+    _This procedure will automatically initialize the baseline state, sort records using null minimization criteria, process the incremental deltas, and log the longitudinal sequence in `analytics.establishment_panel`._
+3. Export the final panel to Snappy compressed partitioned Parquet files:
     ```bash
-    psql -h localhost -U postgres -d cnpj -c "CALL analytics.compress_longitudinal_intervals();"
+    python code/export_panel_parquet.py
+    ```
+    _This streams the reconstructed rows into the `/reconstructed_panel/` directory, saving disk space and optimizing downstream query engines._
+4. (Optional) Generate the PDF version of the technical manifest:
+    ```bash
+    python code/convert_to_pdf.py
     ```
 
 ---
 
 ## 📊 Reconstructed Analytics Schema Dictionary
 
-Our reconstruction process produces five highly optimized targets in the `analytics` schema:
+Our reconstruction process compiles the temporal sequences into a single consolidated table in the `analytics` schema:
 
-1.  `analytics.reconstructed_establishments`: Historical month-by-month SP establishment cohorts.
-2.  `analytics.reconstructed_companies`: Company metadata matching the establishment panels.
-3.  `analytics.reconstructed_simples`: Historical MEI and Simples Nacional enrollment records.
-4.  `analytics.reconstructed_partner_summaries`: Monthly aggregate statistics of board members per company (age spreads, entry/exit deltas).
-5.  `analytics.longitudinal_establishment_intervals`: Invariant interval representation compressing the dataset to save disk space and accelerate longitudinal analytical models.
+1. `analytics.establishment_panel`: Historical, unified month-by-month longitudinal registry table containing complete establishment characteristics, company details, Simples/MEI status, and socio-partner summary counts.
+
+For a full description of the columns, data types, and null coverage metrics, please refer to the `complete_data_manifest.md`.
 
 ---
 
 ## 🔐 Privacy & Anonymization
 
-To protect personally identifiable information (PII) of business owners and representatives, the analytics procedure processes all names, CPFs, and representatives using PG's crypto extensions:
+To protect personally identifiable information (PII) of business owners and representatives, the analytics procedure processes all names, CPFs, and representative identifiers using PG's crypto extensions:
 
-$$\text{hashed\_field} = \text{SHA256}(\text{UTF-8}(\text{value}))$$
+`hashed_field = SHA256(UTF-8(value))`
 
 This preserves relationships and entity linkages across months while ensuring complete privacy and anonymization.
 
