@@ -196,30 +196,70 @@ def run_deduplicate_empresa(cur):
     cur.execute("DROP TABLE IF EXISTS test_incremental.staging_empresa_dedup;")
     cur.execute("""
         CREATE TABLE test_incremental.staging_empresa_dedup AS
-        WITH ranked AS (
-            SELECT *,
-                   ROW_NUMBER() OVER (
-                       PARTITION BY cnpj_basico
-                       ORDER BY
-                           (
-                               (razao_social IS NOT NULL)::int +
-                               (natureza_juridica IS NOT NULL)::int +
-                               (qualificacao_responsavel IS NOT NULL)::int +
-                               (capital_social IS NOT NULL)::int +
-                               (porte_empresa IS NOT NULL)::int +
-                               (ente_federativo_responsavel IS NOT NULL)::int
-                           ) DESC,
-                           razao_social DESC NULLS LAST,
-                           natureza_juridica DESC NULLS LAST,
-                           capital_social DESC NULLS LAST,
-                           porte_empresa DESC NULLS LAST,
-                           ente_federativo_responsavel DESC NULLS LAST
-                   ) as rn
+        WITH company_stats AS (
+            SELECT
+                cnpj_basico,
+                COUNT(DISTINCT capital_social) as dc_cap,
+                COUNT(DISTINCT natureza_juridica) as dc_nat,
+                COUNT(DISTINCT porte_empresa) as dc_por,
+                COUNT(DISTINCT qualificacao_responsavel) as dc_qua,
+                COUNT(DISTINCT ente_federativo_responsavel) as dc_ent
             FROM test_incremental.staging_empresa
+            GROUP BY cnpj_basico
+        ),
+        conflicts AS (
+            SELECT cnpj_basico
+            FROM company_stats
+            WHERE dc_cap > 1 OR dc_nat > 1 OR dc_por > 1 OR dc_qua > 1 OR dc_ent > 1
+        ),
+        -- Insert conflicts into quarantine table
+        quarantine_log AS (
+            INSERT INTO analytics.quarantine_empresa (cnpj_basico, motivo, reference_month)
+            SELECT 
+                s.cnpj_basico,
+                'Conflict in testing staging company fields: ' || 
+                CASE WHEN s.dc_cap > 1 THEN 'capital_social (' || s.dc_cap || ') ' ELSE '' END ||
+                CASE WHEN s.dc_nat > 1 THEN 'natureza_juridica (' || s.dc_nat || ') ' ELSE '' END ||
+                CASE WHEN s.dc_por > 1 THEN 'porte_empresa (' || s.dc_por || ') ' ELSE '' END ||
+                CASE WHEN s.dc_qua > 1 THEN 'qualificacao_responsavel (' || s.dc_qua || ') ' ELSE '' END ||
+                CASE WHEN s.dc_ent > 1 THEN 'ente_federativo_responsavel (' || s.dc_ent || ') ' ELSE '' END,
+                'test'
+            FROM company_stats s
+            JOIN conflicts c ON s.cnpj_basico = c.cnpj_basico
+            ON CONFLICT (cnpj_basico) DO UPDATE 
+            SET motivo = EXCLUDED.motivo, reference_month = EXCLUDED.reference_month
+            RETURNING cnpj_basico
+        ),
+        -- Resolve companies: for non-conflicting ones, take MAX/fewest NULLs. For conflicting ones, resolve to NULL (except name).
+        resolved AS (
+            SELECT
+                e.cnpj_basico,
+                MAX(e.razao_social) AS razao_social,
+                MAX(e.natureza_juridica) AS natureza_juridica,
+                MAX(e.qualificacao_responsavel) AS qualificacao_responsavel,
+                MAX(e.capital_social) AS capital_social,
+                MAX(e.porte_empresa) AS porte_empresa,
+                MAX(e.ente_federativo_responsavel) AS ente_federativo_responsavel
+            FROM test_incremental.staging_empresa e
+            LEFT JOIN conflicts c ON e.cnpj_basico = c.cnpj_basico
+            WHERE c.cnpj_basico IS NULL
+            GROUP BY e.cnpj_basico
+            
+            UNION ALL
+            
+            SELECT
+                c.cnpj_basico,
+                MAX(e.razao_social) AS razao_social,
+                NULL::integer AS natureza_juridica,
+                NULL::integer AS qualificacao_responsavel,
+                NULL::double precision AS capital_social,
+                NULL::integer AS porte_empresa,
+                NULL::text AS ente_federativo_responsavel
+            FROM conflicts c
+            JOIN test_incremental.staging_empresa e ON e.cnpj_basico = c.cnpj_basico
+            GROUP BY c.cnpj_basico
         )
-        SELECT cnpj_basico, razao_social, natureza_juridica, qualificacao_responsavel, capital_social, porte_empresa, ente_federativo_responsavel
-        FROM ranked
-        WHERE rn = 1;
+        SELECT cnpj_basico, razao_social, natureza_juridica, qualificacao_responsavel, capital_social, porte_empresa, ente_federativo_responsavel FROM resolved;
     """)
     cur.execute("DROP TABLE test_incremental.staging_empresa;")
     cur.execute("ALTER TABLE test_incremental.staging_empresa_dedup RENAME TO staging_empresa;")

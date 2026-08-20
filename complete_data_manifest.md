@@ -146,7 +146,7 @@ The final longitudinal panel is exported from PostgreSQL to a partitioned Parque
 
 | Dataset               | Path/Identifier         |   Layer    | Grain      |    Rows    | Columns | Primary Key                          | Partitioning      | Compression |
 | :-------------------- | :---------------------- | :--------: | :--------- | :--------: | :-----: | :----------------------------------- | :---------------- | :---------: |
-| `establishment_panel` | `/reconstructed_panel/` | Analytical | Est.-Month | 49,044,832 |   36    | `(cnpj_basico, cnpj_ordem, cnpj_dv)` | `reference_month` |   Snappy    |
+| `establishment_panel` | `/reconstructed_panel/` | Analytical | Est.-Month | 49,044,396 |   36    | `(cnpj_basico, cnpj_ordem, cnpj_dv)` | `reference_month` |   Snappy    |
 
 - **Separation Rationale:** Partitioning by `reference_month` allows analytical engines (Pandas, DuckDB, Spark) to skip reading unnecessary periods, speeding up analysis.
 - **Ordering:** Rows inside each partition are canonically ordered by `cnpj_basico, cnpj_ordem, cnpj_dv`.
@@ -170,6 +170,7 @@ The principal schema fields of the reconstructed longitudinal panel:
 | `establishment_panel` | `opcao_pelo_simples`    | `VARCHAR(1)` |   Yes    | Simples Nacional regime option (S/N)    | `simples`         | Joined           | Analytical State |
 | `establishment_panel` | `qtde_socios`           |  `INTEGER`   |    No    | Count of company partners               | `socios`          | Aggregated count | Analytical State |
 | `establishment_panel` | `qtde_administradores`  |  `INTEGER`   |    No    | Count of qualified managers             | `socios`          | Aggregated count | Analytical State |
+| `establishment_panel` | `cd_mun`                |  `INTEGER`   |   Yes    | IBGE Municipality Code                  | `munic`           | Joined           | Analytical State |
 
 ---
 
@@ -224,6 +225,19 @@ DELETE FROM staging_estabelecimento WHERE id IN (SELECT id FROM ranked WHERE rn 
 
 This criteria **prioritizes the record with the most complete information** (fewer `NULL` values). The duplicate rows containing more `NULL` values (which represent incomplete or poorly filled registry records) are safely discarded, ensuring no loss of active metadata.
 
+### Company-Level Conflict Detection and Quarantine
+
+If different records for the same `cnpj_basico` (company root) in the raw `public.empresa` or `staging_empresa` tables disagree on any of the five retained company-level fields (`capital_social`, `natureza_juridica`, `porte_empresa`, `qualificacao_responsavel`, `ente_federativo_responsavel`), they are flagged as conflicting.
+
+Rather than arbitrarily selecting one record or applying tie-breakers, the system:
+1. Logs the conflicting `cnpj_basico` root and reasons in the `analytics.quarantine_empresa` table.
+2. Resolves these company fields to `NULL` in the resolved dataset (except for the company name `razao_social` which remains non-analytical).
+3. Ensures that no inconsistent company values are propagated to different establishment branches of the same root.
+
+During the baseline load, exactly two conflicting company roots were quarantined:
+- `11895269`: Conflict in `natureza_juridica` and `qualificacao_responsavel`.
+- `42938862`: Conflict in `natureza_juridica` and `qualificacao_responsavel`.
+
 ### Baseline Duplicates Fix
 
 During joins with `empresa` and `simples` in baseline initialization, row multiplication occurred due to duplicate keys in those tables. To resolve this, a `SELECT DISTINCT ON (est.cnpj_basico, est.cnpj_ordem, est.cnpj_dv)` clause was added to ensure that only unique establishment records are initialized.
@@ -235,7 +249,6 @@ During joins with `empresa` and `simples` in baseline initialization, row multip
 | Duplicate Row Count      |         3          |         0         |
 | Rows Removed             |         0          |         3         |
 
-
 ---
 
 ## 12. Address Processing
@@ -245,13 +258,29 @@ Address fields are loaded as raw string fields:
 - **Municipality Code:** Preserved as numeric identifiers linked to `public.munic`.
 - **ZIP code:** Normalised to 8 digits (character).
 - **Address Changes:** Preserved in the database, but classified as non-analytical.
-
 | Address Field | Preserved? |    Normalized?    | Analytical State? | Can Trigger Analytical UPDATE? |
 | :------------ | :--------: | :---------------: | :---------------: | :----------------------------: |
 | `logradouro`  |    Yes     |    Uppercased     |        No         |               No               |
 | `numero`      |    Yes     |        Yes        |        No         |               No               |
 | `cep`         |    Yes     | Strip punctuation |        No         |               No               |
 | `municipio`   |    Yes     |        Yes        |        Yes        |              Yes               |
+| `cd_mun`      |    Yes     |        Yes        |        Yes        |              Yes               |
+
+### 12.1 IBGE Municipality Code Mapping (`cd_mun`)
+
+The RFB database uses a proprietary 4-digit municipality code (e.g. `7107` for the city of São Paulo). To allow integration with national socioeconomic datasets (such as RAIS, CAGED, or IBGE Censuses), the pipeline joins these codes to the official 7-digit IBGE municipality codes (`cd_mun`).
+
+This mapping is implemented as follows:
+1. **Translation Table:** The table `public.munic` maps the RFB proprietary code (`codigo`) to the official 7-digit IBGE code (`cd_mun`).
+2. **Post-Processing Bulk Update:** To prevent slowdowns in the monthly update loop, `cd_mun` is initialized as `NULL` in the temporal state. After the updates for all months are committed, a bulk update query runs once on `analytics.establishment_panel` to map all municipality codes:
+   ```sql
+   UPDATE analytics.establishment_panel p
+   SET cd_mun = m.cd_mun
+   FROM public.munic m
+   WHERE p.municipio = m.codigo
+     AND p.reference_month BETWEEN start_month AND end_month;
+   ```
+3. **Parquet Schema Export:** The field `cd_mun` is defined as a 32-bit integer in the PyArrow exporter schema and is physically persisted in the final Snappy-compressed Parquet partitions.
 
 ---
 
@@ -308,7 +337,7 @@ Partners were grouped and aggregated on `cnpj_basico` before joining.
 
 - **Row representation:** An establishment at a specific point in time (reference month).
 - **Time Dimension:** Monthly cohorts.
-- **Volume:** 49,044,832 total rows.
+- **Volume:** 49,044,396 total rows.
 
 ---
 
@@ -359,7 +388,7 @@ Transition validation for SP establishments between May 2023 and June 2023.
 
 | Transition     | Previous Rows (May) | Next Rows (June) | Inserts | Deletes | Analytical Updates | No Change  |
 | :------------- | :-----------------: | :--------------: | :-----: | :-----: | :----------------: | :--------: |
-| **May → June** |     16,253,954      |    16,346,167    | 92,213  |    0    |      217,115       | 16,036,839 |
+| **May → June** |     16,253,954      |    16,346,048    | 93,679  |  1,585  |      215,537       | 16,036,832 |
 
 ---
 
@@ -369,13 +398,15 @@ Transition validation for SP establishments between June 2023 and July 2023.
 
 | Transition      | Previous Rows (June) | Next Rows (July) | Inserts | Deletes | Analytical Updates | No Change  |
 | :-------------- | :------------------: | :--------------: | :-----: | :-----: | :----------------: | :--------: |
-| **June → July** |      16,346,167      |    16,444,711    | 98,544  |    0    |      133,300       | 16,212,867 |
+| **June → July** |      16,346,048      |    16,444,394    | 99,833  |  1,487  |      131,783       | 16,212,778 |
 
 ---
 
 ## 23. INSERT / UPDATE / DELETE Manifest
 
-Deletes are exactly **0** in both transitions. In the RFB registry, closed firms are not removed; their `situacao_cadastral` is updated to `8` (Baixada), which registers as an **UPDATE** event in our classification rules.
+Deletes are non-zero (1,585 in May->June and 1,487 in June->July) under the corrected architecture because **geographic transitions** are now correctly captured. Establishments moving from SP to another state are removed from the SP output panel and registered as deletes.
+
+Closed firms are not removed; their `situacao_cadastral` is updated to `8` (Baixada), which registers as an **UPDATE** event in our classification rules.
 
 ---
 
@@ -383,13 +414,13 @@ Deletes are exactly **0** in both transitions. In the RFB registry, closed firms
 
 ### May → June:
 
-- `NextRows = PreviousRows + Inserts - Deletes => 16,253,954 + 92,213 - 0 = 16,346,167` (Reconciled)
-- `PreviousRows = Deletes + Updates + NoChange => 0 + 217,115 + 16,036,839 = 16,253,954` (Reconciled)
+- `NextRows = PreviousRows + Inserts - Deletes => 16,253,954 + 93,679 - 1,585 = 16,346,048` (Reconciled)
+- `PreviousRows = Deletes + Updates + NoChange => 1,585 + 215,537 + 16,036,832 = 16,253,954` (Reconciled)
 
 ### June → July:
 
-- `NextRows = PreviousRows + Inserts - Deletes => 16,346,167 + 98,544 - 0 = 16,444,711` (Reconciled)
-- `PreviousRows = Deletes + Updates + NoChange => 0 + 133,300 + 16,212,867 = 16,346,167` (Reconciled)
+- `NextRows = PreviousRows + Inserts - Deletes => 16,346,048 + 99,833 - 1,487 = 16,444,394` (Reconciled)
+- `PreviousRows = Deletes + Updates + NoChange => 1,487 + 131,783 + 16,212,778 = 16,346,048` (Reconciled)
 
 ---
 
@@ -400,8 +431,8 @@ Deterministic MD5 signatures calculated from the aggregated column state:
 | Artifact        |       Rows | Columns | Canonical Ordering                 | Algorithm | Checksum                           |
 | :-------------- | ---------: | ------: | :--------------------------------- | :-------: | :--------------------------------- |
 | Panel `2023-05` | 16,253,954 |      36 | `cnpj_basico, cnpj_ordem, cnpj_dv` |    MD5    | `c69f4af0dc8ad6336e7d4d76ac14df27` |
-| Panel `2023-06` | 16,346,167 |      36 | `cnpj_basico, cnpj_ordem, cnpj_dv` |    MD5    | `43771b98c6cd13a852822e5d67e673af` |
-| Panel `2023-07` | 16,444,711 |      36 | `cnpj_basico, cnpj_ordem, cnpj_dv` |    MD5    | `30cfd10ab1e9fab9c889fc8ba15a8ea2` |
+| Panel `2023-06` | 16,346,048 |      36 | `cnpj_basico, cnpj_ordem, cnpj_dv` |    MD5    | `1caa8e208efdea3100250e3185126ab1` |
+| Panel `2023-07` | 16,444,394 |      36 | `cnpj_basico, cnpj_ordem, cnpj_dv` |    MD5    | `c8d5b17969a008d1d05fc3135faedfa2` |
 
 ---
 
@@ -444,8 +475,24 @@ graph TD
 |    Period     |       Rows | Unique Entities | Missingness | Checksum                           |
 | :-----------: | ---------: | --------------: | :---------: | :--------------------------------- |
 | **`2023-05`** | 16,253,954 |      16,253,954 |  0% on PK   | `c69f4af0dc8ad6336e7d4d76ac14df27` |
-| **`2023-06`** | 16,346,167 |      16,346,167 |  0% on PK   | `43771b98c6cd13a852822e5d67e673af` |
-| **`2023-07`** | 16,444,711 |      16,444,711 |  0% on PK   | `30cfd10ab1e9fab9c889fc8ba15a8ea2` |
+| **`2023-06`** | 16,346,048 |      16,346,048 |  0% on PK   | `1caa8e208efdea3100250e3185126ab1` |
+| **`2023-07`** | 16,444,394 |      16,444,394 |  0% on PK   | `c8d5b17969a008d1d05fc3135faedfa2` |
+
+### Parquet File Metadata & MD5 Hashes (Regenerated SP Output)
+
+| File / Partition | Row Count | File Size (Bytes) | MD5 Checksum |
+| :--- | ---: | ---: | :--- |
+| `reconstructed_panel/reference_month=2023-05/part-000.parquet` | 16,253,954 | 412,427,074 | `484dddbb7c1de03ba2c54e3f2e5f5f89` |
+| `reconstructed_panel/reference_month=2023-06/part-000.parquet` | 16,346,048 | 416,049,760 | `6734f4a2dc445dede750018884855c86` |
+| `reconstructed_panel/reference_month=2023-07/part-000.parquet` | 16,444,394 | 420,266,924 | `55aa332b2c05cbf126eb2edd65952625` |
+
+### Preserved Audited Parquet Hashes (For Lineage Comparison)
+
+| File / Partition | Row Count | File Size (Bytes) | MD5 Checksum |
+| :--- | ---: | ---: | :--- |
+| `reconstructed_panel_audited/reference_month=2023-05/part-000.parquet` | 16,253,954 | 411,820,460 | `1954e95ef3a6613fcc62c691c3c3882e` |
+| `reconstructed_panel_audited/reference_month=2023-06/part-000.parquet` | 16,346,167 | 415,756,803 | `26309c8d5f36bac7554918db2287e533` |
+| `reconstructed_panel_audited/reference_month=2023-07/part-000.parquet` | 16,444,711 | 419,482,743 | `e05d221257717c24fd8087bcc0d11e9b` |
 
 ---
 
@@ -503,10 +550,10 @@ Higher levels depend on the validation of lower levels. A checksum is only valid
 
 The corporate registration database has been successfully compiled into a longitudinal panel for SP from May to July 2023.
 
-1. **Collected & Preserved:** 49 million rows are preserved in Parquet partitions.
+1. **Collected & Preserved:** 49,044,396 rows are preserved in Parquet partitions.
 2. **Aggregated:** Socios data aggregated by `cnpj_basico` (22.7 million rows of socios aggregated to 12.5 million companies).
-3. **Transition Counts (May → June):** Inserts: `92,213`, Updates: `217,115`, Deletes: `0`, NoChange: `16,036,839`.
-4. **Transition Counts (June → July):** Inserts: `98,544`, Updates: `133,300`, Deletes: `0`, NoChange: `16,212,867`.
+3. **Transition Counts (May → June):** Inserts: `93,679`, Updates: `215,537`, Deletes: `1,585`, NoChange: `16,036,832`.
+4. **Transition Counts (June → July):** Inserts: `99,833`, Updates: `131,783`, Deletes: `1,487`, NoChange: `16,212,778`.
 5. **Checksum Validation:** Output files match deterministic signatures.
 
 ---

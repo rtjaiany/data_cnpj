@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS analytics.establishment_panel (
     data_entrada_antiga INTEGER,
     data_entrada_recente INTEGER,
     qtde_administradores INTEGER DEFAULT 0,
+    cd_mun INTEGER,
     PRIMARY KEY (reference_month, cnpj_basico, cnpj_ordem, cnpj_dv)
 );
 
@@ -82,7 +83,61 @@ BEGIN
     )
     SELECT ARRAY_AGG(TO_CHAR(m_date, 'YYYY-MM')) INTO months FROM month_list;
 
-    -- 3. Initialize current-state temp table with baseline (May 2023)
+    -- 2.5 Create quarantine table if not exists and clear records for the start_month
+    CREATE TABLE IF NOT EXISTS analytics.quarantine_empresa (
+        cnpj_basico VARCHAR(8) PRIMARY KEY,
+        motivo TEXT,
+        reference_month VARCHAR(7),
+        inserted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    DELETE FROM analytics.quarantine_empresa WHERE reference_month = start_month;
+
+    -- Identify conflicting company roots in public.empresa
+    INSERT INTO analytics.quarantine_empresa (cnpj_basico, motivo, reference_month)
+    SELECT 
+        cnpj_basico,
+        'Conflict in retained company fields: ' || 
+        CASE WHEN dc_cap > 1 THEN 'capital_social (' || dc_cap || ') ' ELSE '' END ||
+        CASE WHEN dc_nat > 1 THEN 'natureza_juridica (' || dc_nat || ') ' ELSE '' END ||
+        CASE WHEN dc_por > 1 THEN 'porte_empresa (' || dc_por || ') ' ELSE '' END ||
+        CASE WHEN dc_qua > 1 THEN 'qualificacao_responsavel (' || dc_qua || ') ' ELSE '' END ||
+        CASE WHEN dc_ent > 1 THEN 'ente_federativo_responsavel (' || dc_ent || ') ' ELSE '' END,
+        start_month
+    FROM (
+        SELECT
+            cnpj_basico,
+            COUNT(DISTINCT capital_social) as dc_cap,
+            COUNT(DISTINCT natureza_juridica) as dc_nat,
+            COUNT(DISTINCT porte_empresa) as dc_por,
+            COUNT(DISTINCT qualificacao_responsavel) as dc_qua,
+            COUNT(DISTINCT ente_federativo_responsavel) as dc_ent
+        FROM public.empresa
+        GROUP BY cnpj_basico
+        HAVING COUNT(*) > 1
+    ) stats
+    WHERE dc_cap > 1 OR dc_nat > 1 OR dc_por > 1 OR dc_qua > 1 OR dc_ent > 1
+    ON CONFLICT (cnpj_basico) DO UPDATE 
+    SET motivo = EXCLUDED.motivo, reference_month = EXCLUDED.reference_month;
+
+    -- Deduplicate public.empresa into a temporary table temp_resolved_empresa
+    DROP TABLE IF EXISTS temp_resolved_empresa;
+    CREATE TEMP TABLE temp_resolved_empresa AS
+    SELECT
+        e.cnpj_basico,
+        MAX(e.capital_social) AS capital_social,
+        MAX(e.natureza_juridica) AS natureza_juridica,
+        MAX(e.porte_empresa) AS porte_empresa,
+        MAX(e.qualificacao_responsavel) AS qualificacao_responsavel,
+        MAX(e.ente_federativo_responsavel) AS ente_federativo_responsavel
+    FROM public.empresa e
+    LEFT JOIN analytics.quarantine_empresa q ON e.cnpj_basico = q.cnpj_basico
+    WHERE q.cnpj_basico IS NULL
+    GROUP BY e.cnpj_basico;
+
+    CREATE UNIQUE INDEX ON temp_resolved_empresa (cnpj_basico);
+
+    -- 3. Initialize current-state temp table with baseline (May 2023) - NATIONAL STATE
     DROP TABLE IF EXISTS temp_current_state;
     
     CREATE TEMP TABLE temp_current_state AS
@@ -121,9 +176,10 @@ BEGIN
         soc.max_faixa_etaria::int as max_faixa_etaria,
         soc.data_entrada_antiga::int as data_entrada_antiga,
         soc.data_entrada_recente::int as data_entrada_recente,
-        COALESCE(soc.qtde_administradores, 0)::int as qtde_administradores
+        COALESCE(soc.qtde_administradores, 0)::int as qtde_administradores,
+        NULL::integer as cd_mun
     FROM public.estabelecimento est
-    LEFT JOIN public.empresa emp ON emp.cnpj_basico = est.cnpj_basico
+    LEFT JOIN temp_resolved_empresa emp ON emp.cnpj_basico = est.cnpj_basico
     LEFT JOIN public.simples smp ON smp.cnpj_basico = est.cnpj_basico
     LEFT JOIN (
         SELECT
@@ -140,7 +196,6 @@ BEGIN
         FROM public.socios
         GROUP BY cnpj_basico
     ) soc ON soc.cnpj_basico = est.cnpj_basico
-    WHERE (state_filter IS NULL OR est.uf = state_filter)
     ORDER BY est.cnpj_basico, est.cnpj_ordem, est.cnpj_dv, est.situacao_cadastral DESC NULLS LAST;
 
     CREATE UNIQUE INDEX ON temp_current_state (cnpj_basico, cnpj_ordem, cnpj_dv);
@@ -153,9 +208,10 @@ BEGIN
         RAISE INFO 'Processing month: %', curr_month;
 
         IF curr_month = start_month THEN
-            -- First month is the initial state (May 2023 baseline)
+            -- First month is the initial state (May 2023 baseline) - apply geographic filter on output layer
             INSERT INTO analytics.establishment_panel
-            SELECT curr_month, * FROM temp_current_state;
+            SELECT curr_month, * FROM temp_current_state
+            WHERE (state_filter IS NULL OR uf = ANY(string_to_array(state_filter, ',')));
         ELSE
             -- Apply snapshots of the current month to temp_current_state
 
@@ -200,7 +256,7 @@ BEGIN
                 capital_social, natureza_juridica, porte_empresa, qualificacao_responsavel, ente_federativo_responsavel,
                 opcao_pelo_simples, data_opcao_simples, data_exclusao_simples, opcao_mei, data_opcao_mei, data_exclusao_mei,
                 qtde_socios, qtde_socios_pf, qtde_socios_pj, qtde_socios_estrangeiro, min_faixa_etaria, max_faixa_etaria,
-                data_entrada_antiga, data_entrada_recente, qtde_administradores
+                data_entrada_antiga, data_entrada_recente, qtde_administradores, cd_mun
             )
             SELECT
                 s.cnpj_basico,
@@ -237,13 +293,14 @@ BEGIN
                 COALESCE(c.max_faixa_etaria, b_soc.max_faixa_etaria),
                 COALESCE(c.data_entrada_antiga, b_soc.data_entrada_antiga),
                 COALESCE(c.data_entrada_recente, b_soc.data_entrada_recente),
-                COALESCE(c.qtde_administradores, b_soc.qtde_administradores, 0)
+                COALESCE(c.qtde_administradores, b_soc.qtde_administradores, 0),
+                NULL::integer
             FROM public.snapshots s
             LEFT JOIN (
                 SELECT DISTINCT ON (cnpj_basico) *
                 FROM temp_current_state
             ) c ON c.cnpj_basico = s.cnpj_basico
-            LEFT JOIN public.empresa b_emp ON b_emp.cnpj_basico = s.cnpj_basico AND c.cnpj_basico IS NULL
+            LEFT JOIN temp_resolved_empresa b_emp ON b_emp.cnpj_basico = s.cnpj_basico AND c.cnpj_basico IS NULL
             LEFT JOIN public.simples b_smp ON b_smp.cnpj_basico = s.cnpj_basico AND c.cnpj_basico IS NULL
             LEFT JOIN (
                 SELECT
@@ -263,7 +320,6 @@ BEGIN
             WHERE s.tabela = 'estabelecimento'
               AND s.mes_referencia = curr_month
               AND s.tipo_alteracao = 'INSERT'
-              AND (state_filter IS NULL OR s.conteudo_novo->>'uf' = state_filter)
             ON CONFLICT (cnpj_basico, cnpj_ordem, cnpj_dv) DO NOTHING;
 
             -- D. EMPRESA Updates & Inserts
@@ -357,11 +413,20 @@ BEGIN
             -- Clean and optimize temp table state
             ANALYZE temp_current_state;
 
-            -- Append current state to final panel table
+            -- Append current state to final panel table - apply geographic filter on output layer
             INSERT INTO analytics.establishment_panel
-            SELECT curr_month, * FROM temp_current_state;
+            SELECT curr_month, * FROM temp_current_state
+            WHERE (state_filter IS NULL OR uf = ANY(string_to_array(state_filter, ',')));
         END IF;
     END LOOP;
+
+    -- 5. Post-processing: Bulk update cd_mun from public.munic to keep loop lightweight
+    RAISE INFO 'Post-processing: updating cd_mun in analytics.establishment_panel...';
+    UPDATE analytics.establishment_panel p
+    SET cd_mun = m.cd_mun
+    FROM public.munic m
+    WHERE p.municipio = m.codigo
+      AND p.reference_month BETWEEN start_month AND end_month;
 
     -- Clean up temporary table
     DROP TABLE IF EXISTS temp_current_state;
