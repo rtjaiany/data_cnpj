@@ -682,7 +682,7 @@ for e in range(0, len(arquivos_simples)):
     )
 
     tamanho_das_partes = 1000000  # Registros por carga
-    partes = round(simples_lenght / tamanho_das_partes)
+    partes = (simples_lenght + tamanho_das_partes - 1) // tamanho_das_partes
     nrows = tamanho_das_partes
     skiprows = 0
 
@@ -902,23 +902,15 @@ for e in range(0, len(arquivos_munic)):
     # Renomear colunas
     munic.columns = ["codigo", "descricao"]
 
-    # Acoplar códigos IBGE a partir de municipios.csv se existir
+    # Acoplar códigos IBGE a partir de munic.csv se existir
     proj_dir = os.path.dirname(dotenv_path)
-    csv_path = os.path.join(proj_dir, "municipios.csv")
+    csv_path = os.path.join(proj_dir, "munic.csv")
     if os.path.isfile(csv_path):
         print(f"Acoplando códigos IBGE a partir de: {csv_path}...")
-        df_csv = pd.read_csv(csv_path, sep=";", encoding="latin1")
+        df_csv = pd.read_csv(csv_path)
         df_csv.columns = [col.strip() for col in df_csv.columns]
-        mapping = df_csv[
-            ["CÓDIGO DO MUNICÍPIO - TOM", "CÓDIGO DO MUNICÍPIO - IBGE"]
-        ].copy()
-        mapping.columns = ["codigo", "cd_mun"]
+        mapping = df_csv[["codigo", "cd_mun"]].copy()
         mapping = mapping.drop_duplicates(subset=["codigo"])
-
-        # Inserir manualmente o registro de Boa Esperança do Norte
-        if 1182 not in mapping["codigo"].values:
-            new_row = pd.DataFrame([{"codigo": 1182, "cd_mun": 5101837}])
-            mapping = pd.concat([mapping, new_row], ignore_index=True)
 
         mapping["codigo"] = mapping["codigo"].astype("Int32")
         mapping["cd_mun"] = mapping["cd_mun"].astype("Int32")

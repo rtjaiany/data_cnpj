@@ -428,6 +428,23 @@ BEGIN
     WHERE p.municipio = m.codigo
       AND p.reference_month BETWEEN start_month AND end_month;
 
+    -- 6. Post-processing: Force quarantined company fields (including Simples/MEI) to NULL across all months in target range
+    RAISE INFO 'Post-processing: applying persistent quarantine cleanup...';
+    UPDATE analytics.establishment_panel
+    SET capital_social = NULL,
+        natureza_juridica = NULL,
+        porte_empresa = NULL,
+        qualificacao_responsavel = NULL,
+        ente_federativo_responsavel = NULL,
+        opcao_pelo_simples = NULL,
+        data_opcao_simples = NULL,
+        data_exclusao_simples = NULL,
+        opcao_mei = NULL,
+        data_opcao_mei = NULL,
+        data_exclusao_mei = NULL
+    WHERE reference_month BETWEEN start_month AND end_month
+      AND cnpj_basico IN (SELECT cnpj_basico FROM analytics.quarantine_empresa);
+
     -- Clean up temporary table
     DROP TABLE IF EXISTS temp_current_state;
     RAISE INFO 'Longitudinal panel reconstruction completed successfully!';

@@ -43,7 +43,8 @@ schema_panel = pa.schema([
     ('max_faixa_etaria', pa.int32()),
     ('data_entrada_antiga', pa.int32()),
     ('data_entrada_recente', pa.int32()),
-    ('qtde_administradores', pa.int32())
+    ('qtde_administradores', pa.int32()),
+    ('cd_mun', pa.int32())
 ])
 
 def export_month_to_parquet(conn, ref_month, output_dir):
@@ -60,9 +61,10 @@ def export_month_to_parquet(conn, ref_month, output_dir):
             data_opcao_simples, data_exclusao_simples, opcao_mei, data_opcao_mei,
             data_exclusao_mei, qtde_socios, qtde_socios_pf, qtde_socios_pj,
             qtde_socios_estrangeiro, min_faixa_etaria, max_faixa_etaria,
-            data_entrada_antiga, data_entrada_recente, qtde_administradores
+            data_entrada_antiga, data_entrada_recente, qtde_administradores, cd_mun
         FROM analytics.establishment_panel
         WHERE reference_month = %s
+        ORDER BY cnpj_basico, cnpj_ordem, cnpj_dv
     """
     
     cursor_name = "stream_cur_" + str(int(time.time() * 1000))

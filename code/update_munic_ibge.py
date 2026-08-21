@@ -25,35 +25,24 @@ def main():
     db_port = os.getenv('DB_PORT')
     db_name = os.getenv('DB_NAME')
     
-    csv_path = os.path.join(parent_dir, 'municipios.csv')
+    csv_path = os.path.join(parent_dir, 'munic.csv')
     if not os.path.isfile(csv_path):
-        print(f"Error: municipios.csv not found at {csv_path}")
+        print(f"Error: munic.csv not found at {csv_path}")
         sys.exit(1)
         
-    # 2. Load and prepare mapping from CSV
+    # 2. Load and prepare data from CSV
     print(f"Reading CSV file: {csv_path}...")
-    df_csv = pd.read_csv(csv_path, sep=';', encoding='latin1')
+    df_csv = pd.read_csv(csv_path)
     df_csv.columns = [col.strip() for col in df_csv.columns]
     
-    # Select mapping columns and drop duplicates if any
-    mapping = df_csv[['CÓDIGO DO MUNICÍPIO - TOM', 'CÓDIGO DO MUNICÍPIO - IBGE']].copy()
-    mapping.columns = ['codigo', 'cd_mun']
-    mapping = mapping.drop_duplicates(subset=['codigo'])
+    # Ensure correct data types
+    df_csv['codigo'] = df_csv['codigo'].astype(int)
+    df_csv['cd_mun'] = df_csv['cd_mun'].astype(int)
+    df_csv['descricao'] = df_csv['descricao'].astype(str)
     
-    # 3. Add manual entry for newly created/installed municipality
-    # Boa Esperança do Norte (MT) has TOM code 1182 and IBGE code 5101837
-    if 1182 not in mapping['codigo'].values:
-        print("Adding manual entry for 'BOA ESPERANCA DO NORTE' (TOM: 1182, IBGE: 5101837)")
-        new_row = pd.DataFrame([{'codigo': 1182, 'cd_mun': 5101837}])
-        mapping = pd.concat([mapping, new_row], ignore_index=True)
-        
-    # Ensure columns are integer
-    mapping['codigo'] = mapping['codigo'].astype(int)
-    mapping['cd_mun'] = mapping['cd_mun'].astype(int)
+    print(f"Loaded {len(df_csv)} records from CSV.")
     
-    print(f"Mapping size: {len(mapping)} records.")
-    
-    # 4. Connect to PostgreSQL database
+    # 3. Connect to PostgreSQL database
     print(f"Connecting to database '{db_name}' on '{db_host}'...")
     conn = psycopg2.connect(
         dbname=db_name,
@@ -70,42 +59,26 @@ def main():
             row_count_before = cur.fetchone()[0]
             print(f"Current row count in public.munic: {row_count_before}")
             
-            # Step 1: Add the column if it doesn't exist
-            print("Altering table to add 'cd_mun' column...")
-            cur.execute('ALTER TABLE public.munic ADD COLUMN IF NOT EXISTS cd_mun integer;')
+            # Step 1: Truncate table
+            print("Truncating table public.munic...")
+            cur.execute('TRUNCATE TABLE public.munic;')
             
-            # Step 2: Create temporary table for mapping
-            print("Creating temporary staging table...")
-            cur.execute('CREATE TEMP TABLE temp_muni_map (codigo integer PRIMARY KEY, cd_mun integer);')
-            
-            # Step 3: Insert mapping into temporary table
-            print("Inserting mapping into temporary table...")
-            insert_query = "INSERT INTO temp_muni_map (codigo, cd_mun) VALUES %s"
-            data_tuples = list(mapping.itertuples(index=False, name=None))
+            # Step 2: Insert data into public.munic
+            print("Inserting records from CSV into public.munic...")
+            insert_query = "INSERT INTO public.munic (codigo, descricao, cd_mun) VALUES %s"
+            data_tuples = list(df_csv.itertuples(index=False, name=None))
             execute_values(cur, insert_query, data_tuples)
             
-            # Step 4: Perform the bulk update
-            print("Updating public.munic with IBGE codes...")
-            update_query = """
-                UPDATE public.munic m
-                SET cd_mun = tm.cd_mun
-                FROM temp_muni_map tm
-                WHERE m.codigo = tm.codigo;
-            """
-            cur.execute(update_query)
-            updated_rows = cur.rowcount
-            print(f"Updated {updated_rows} rows.")
-            
-            # Step 5: Verify the results
+            # Step 3: Verify the results
             print("Verifying database changes...")
+            cur.execute('SELECT COUNT(*) FROM public.munic;')
+            row_count_after = cur.fetchone()[0]
+            print(f"Row count in public.munic after update: {row_count_after}")
             
-            # Check if there are any NULL values remaining in cd_mun
-            cur.execute('SELECT COUNT(*), string_agg(descricao || \' (\' || codigo || \')\', \', \') FROM public.munic WHERE cd_mun IS NULL;')
-            null_count, null_list = cur.fetchone()
-            
+            cur.execute('SELECT COUNT(*) FROM public.munic WHERE cd_mun IS NULL;')
+            null_count = cur.fetchone()[0]
             if null_count > 0:
                 print(f"WARNING: {null_count} rows still have NULL cd_mun value!")
-                print(f"Unmapped rows: {null_list}")
             else:
                 print("Success: All rows have been mapped to non-null IBGE codes.")
                 
@@ -132,3 +105,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

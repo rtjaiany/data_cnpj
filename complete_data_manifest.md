@@ -482,9 +482,9 @@ graph TD
 
 | File / Partition | Row Count | File Size (Bytes) | MD5 Checksum |
 | :--- | ---: | ---: | :--- |
-| `reconstructed_panel/reference_month=2023-05/part-000.parquet` | 16,253,954 | 412,427,074 | `484dddbb7c1de03ba2c54e3f2e5f5f89` |
-| `reconstructed_panel/reference_month=2023-06/part-000.parquet` | 16,346,048 | 416,049,760 | `6734f4a2dc445dede750018884855c86` |
-| `reconstructed_panel/reference_month=2023-07/part-000.parquet` | 16,444,394 | 420,266,924 | `55aa332b2c05cbf126eb2edd65952625` |
+| `reconstructed_panel/reference_month=2023-05/part-000.parquet` | 16,253,954 | 412,060,047 | `2bd8e77e7905b3e3328261aa5883632f` |
+| `reconstructed_panel/reference_month=2023-06/part-000.parquet` | 16,346,048 | 415,020,382 | `0935c5db865c01d154fa987dc3f18560` |
+| `reconstructed_panel/reference_month=2023-07/part-000.parquet` | 16,444,394 | 418,291,349 | `3c7551207724bb40345a0c47b688445a` |
 
 ### Preserved Audited Parquet Hashes (For Lineage Comparison)
 
