@@ -179,11 +179,11 @@ The principal schema fields of the reconstructed longitudinal panel:
 Below is a representative sample of the first 3 rows of the reconstructed panel:
 
 ```markdown
-| reference_month | cnpj_basico | cnpj_ordem | cnpj_dv | situacao_cadastral | cnae_fiscal_principal | uf  | municipio | capital_social | qtde_socios |
-| :-------------- | :---------- | :--------- | :------ | :----------------: | :-------------------: | :-: | :-------: | :------------: | :---------: |
-| 2023-05         | 00000000    | 0004       | 34      |         2          |        6422100        | SP  |   7071    | 90000023475.34 |     37      |
-| 2023-05         | 00000000    | 0018       | 30      |         2          |        6422100        | SP  |   7107    | 90000023475.34 |     37      |
-| 2023-05         | 00000000    | 0027       | 20      |         2          |        6422100        | SP  |   6607    | 90000023475.34 |     37      |
+| reference_month | cnpj_basico | cnpj_ordem | cnpj_dv | situacao_cadastral | cnae_fiscal_principal | uf  | municipio | capital_social | qtde_socios |  cd_mun  |
+| :-------------- | :---------- | :--------- | :------ | :----------------: | :-------------------: | :-: | :-------: | :------------: | :---------: | :------: |
+| 2023-05         | 00000000    | 0004       | 34      |         2          |        6422100        | SP  |   7071    | 90000023475.34 |     37      | 3548500  |
+| 2023-05         | 00000000    | 0018       | 30      |         2          |        6422100        | SP  |   7107    | 90000023475.34 |     37      | 3550308  |
+| 2023-05         | 00000000    | 0027       | 20      |         2          |        6422100        | SP  |   6607    | 90000023475.34 |     37      | 3525300  |
 ```
 
 ---
@@ -202,7 +202,7 @@ Below is a representative sample of the first 3 rows of the reconstructed panel:
 
 ### Staging Table Deduplication (ETL Ingestion Layer)
 
-During delta updates (specifically observed in `2023-07`), the raw files contained duplicate entries for the composite key `(cnpj_basico, cnpj_ordem, cnpj_dv)`. This broke the database load during the `ON CONFLICT DO UPDATE` operation. 
+During delta updates (specifically observed in `2023-07`), the raw files contained duplicate entries for the composite key `(cnpj_basico, cnpj_ordem, cnpj_dv)`. This broke the database load during the `ON CONFLICT DO UPDATE` operation.
 
 To resolve this without data loss, a deduplication step was added in [ETL_incremental_dados_RFB.py](file:///Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01%20-%20In%20Progress/03%20-%20Dissertation/data_cnpj/code/ETL_incremental_dados_RFB.py#L713-L745). The deduplication query uses a CTE with a window function partitioned by the CNPJ composite key and ordered by the count of non-null columns:
 
@@ -230,11 +230,13 @@ This criteria **prioritizes the record with the most complete information** (few
 If different records for the same `cnpj_basico` (company root) in the raw `public.empresa` or `staging_empresa` tables disagree on any of the five retained company-level fields (`capital_social`, `natureza_juridica`, `porte_empresa`, `qualificacao_responsavel`, `ente_federativo_responsavel`), they are flagged as conflicting.
 
 Rather than arbitrarily selecting one record or applying tie-breakers, the system:
+
 1. Logs the conflicting `cnpj_basico` root and reasons in the `analytics.quarantine_empresa` table.
 2. Resolves these company fields to `NULL` in the resolved dataset (except for the company name `razao_social` which remains non-analytical).
 3. Ensures that no inconsistent company values are propagated to different establishment branches of the same root.
 
 During the baseline load, exactly two conflicting company roots were quarantined:
+
 - `11895269`: Conflict in `natureza_juridica` and `qualificacao_responsavel`.
 - `42938862`: Conflict in `natureza_juridica` and `qualificacao_responsavel`.
 
@@ -258,6 +260,7 @@ Address fields are loaded as raw string fields:
 - **Municipality Code:** Preserved as numeric identifiers linked to `public.munic`.
 - **ZIP code:** Normalised to 8 digits (character).
 - **Address Changes:** Preserved in the database, but classified as non-analytical.
+
 | Address Field | Preserved? |    Normalized?    | Analytical State? | Can Trigger Analytical UPDATE? |
 | :------------ | :--------: | :---------------: | :---------------: | :----------------------------: |
 | `logradouro`  |    Yes     |    Uppercased     |        No         |               No               |
@@ -271,15 +274,16 @@ Address fields are loaded as raw string fields:
 The RFB database uses a proprietary 4-digit municipality code (e.g. `7107` for the city of São Paulo). To allow integration with national socioeconomic datasets (such as RAIS, CAGED, or IBGE Censuses), the pipeline joins these codes to the official 7-digit IBGE municipality codes (`cd_mun`).
 
 This mapping is implemented as follows:
+
 1. **Translation Table:** The table `public.munic` maps the RFB proprietary code (`codigo`) to the official 7-digit IBGE code (`cd_mun`).
 2. **Post-Processing Bulk Update:** To prevent slowdowns in the monthly update loop, `cd_mun` is initialized as `NULL` in the temporal state. After the updates for all months are committed, a bulk update query runs once on `analytics.establishment_panel` to map all municipality codes:
-   ```sql
-   UPDATE analytics.establishment_panel p
-   SET cd_mun = m.cd_mun
-   FROM public.munic m
-   WHERE p.municipio = m.codigo
-     AND p.reference_month BETWEEN start_month AND end_month;
-   ```
+    ```sql
+    UPDATE analytics.establishment_panel p
+    SET cd_mun = m.cd_mun
+    FROM public.munic m
+    WHERE p.municipio = m.codigo
+      AND p.reference_month BETWEEN start_month AND end_month;
+    ```
 3. **Parquet Schema Export:** The field `cd_mun` is defined as a 32-bit integer in the PyArrow exporter schema and is physically persisted in the final Snappy-compressed Parquet partitions.
 
 ---
@@ -480,19 +484,19 @@ graph TD
 
 ### Parquet File Metadata & MD5 Hashes (Regenerated SP Output)
 
-| File / Partition | Row Count | File Size (Bytes) | MD5 Checksum |
-| :--- | ---: | ---: | :--- |
-| `reconstructed_panel/reference_month=2023-05/part-000.parquet` | 16,253,954 | 412,060,047 | `2bd8e77e7905b3e3328261aa5883632f` |
-| `reconstructed_panel/reference_month=2023-06/part-000.parquet` | 16,346,048 | 415,020,382 | `0935c5db865c01d154fa987dc3f18560` |
-| `reconstructed_panel/reference_month=2023-07/part-000.parquet` | 16,444,394 | 418,291,349 | `3c7551207724bb40345a0c47b688445a` |
+| File / Partition                                               |  Row Count | File Size (Bytes) | MD5 Checksum                       |
+| :------------------------------------------------------------- | ---------: | ----------------: | :--------------------------------- |
+| `reconstructed_panel/reference_month=2023-05/part-000.parquet` | 16,253,954 |       412,060,047 | `2bd8e77e7905b3e3328261aa5883632f` |
+| `reconstructed_panel/reference_month=2023-06/part-000.parquet` | 16,346,048 |       415,020,382 | `0935c5db865c01d154fa987dc3f18560` |
+| `reconstructed_panel/reference_month=2023-07/part-000.parquet` | 16,444,394 |       418,291,349 | `3c7551207724bb40345a0c47b688445a` |
 
 ### Preserved Audited Parquet Hashes (For Lineage Comparison)
 
-| File / Partition | Row Count | File Size (Bytes) | MD5 Checksum |
-| :--- | ---: | ---: | :--- |
-| `reconstructed_panel_audited/reference_month=2023-05/part-000.parquet` | 16,253,954 | 412,060,047 | `2bd8e77e7905b3e3328261aa5883632f` |
-| `reconstructed_panel_audited/reference_month=2023-06/part-000.parquet` | 16,346,048 | 415,017,956 | `769d4394e581daa1d12650d5a89d4534` |
-| `reconstructed_panel_audited/reference_month=2023-07/part-000.parquet` | 16,444,394 | 418,291,284 | `8ae8b0a749452372982e342994836224` |
+| File / Partition                                                       |  Row Count | File Size (Bytes) | MD5 Checksum                       |
+| :--------------------------------------------------------------------- | ---------: | ----------------: | :--------------------------------- |
+| `reconstructed_panel_audited/reference_month=2023-05/part-000.parquet` | 16,253,954 |       412,060,047 | `2bd8e77e7905b3e3328261aa5883632f` |
+| `reconstructed_panel_audited/reference_month=2023-06/part-000.parquet` | 16,346,048 |       415,017,956 | `769d4394e581daa1d12650d5a89d4534` |
+| `reconstructed_panel_audited/reference_month=2023-07/part-000.parquet` | 16,444,394 |       418,291,284 | `8ae8b0a749452372982e342994836224` |
 
 ---
 
@@ -585,15 +589,18 @@ ORDER BY reference_month;
 This appendix documents the final post-validation cleanup work and baseline provenance checks.
 
 ### 37.1 Version Control and Provenance
+
 - **TRUE Accepted CORE Commit:** `d924aa97fbfca074a9d63395dc39c87f15b62f0d` (the accepted geographic transition and national memory architecture validated by the independent auditor).
 - **Post-Validation Cleanup Commit:** `30fd35fcd9185a7301c3e39031efee804ce35489` (quarantine update, simples division fix, deterministic ordering, and municipality mapping).
 - **Reconstruction Difference:** The TRUE CORE version represents the geo-transition fixed loop. The Cleanup version is a post-validation cleanup layer whose immutable reconstruction behavior was regression-tested against the accepted CORE.
 
 ### 37.2 Output Scope & Geographic Generality
+
 - **Validation Target Population:** State of São Paulo (`uf = 'SP'`) for May, June, and July 2023.
 - **Loop Generality:** The stored procedure `analytics.reconstruct_panel` resolves the database state and replays updates **nationally** in memory, and the state-level population filtering (`SP`) is strictly applied at the final output-append layer. The pipeline is designed to support national panel generation or arbitrary sub-national state partitions.
 
 ### 37.3 Company-Level Quarantine
+
 - **Database Table:** `analytics.quarantine_empresa`.
 - **Target Company Roots (`cnpj_basico`):** `11895269` and `42938862`.
 - **Quarantine Scope:** Applied consistently across all target months and partitions. It is month-independent and independent of geographic filtering.
@@ -603,35 +610,38 @@ This appendix documents the final post-validation cleanup work and baseline prov
 - **Generic Conflict Handling:** Maintained through generic SQL queries checking for mismatching company details during staging. Future conflicting company roots will be dynamically identified, logged to the quarantine table, and nullified.
 
 ### 37.4 May Simples/MEI Baseline Ingestion Provenance
+
 - **Raw File Source:** `F.K03200$W.SIMPLES.CSV.D30513` containing exactly `35,333,872` records.
 - **Ceiling Division Correction:** Corrected rounded-down chunking in `code/ETL_coletar_dados_e_gravar_BD.py` to ceiling division: `(simples_lenght + tamanho_das_partes - 1) // tamanho_das_partes`.
 - **Database Count:** Exactly `35,333,872` records reloaded in `public.simples`.
 - **May Recovery Validation:** Exactly **`68,950`** distinct company roots in the May panel were verified against the raw skipped CSV records.
-- **Regression Behavior:** Because both the TRUE CORE baseline and the cleanup reconstruction were generated *after* correcting `public.simples` in the database, the regression script correctly reports **zero** May Simples differences between the two Parquet partitions.
+- **Regression Behavior:** Because both the TRUE CORE baseline and the cleanup reconstruction were generated _after_ correcting `public.simples` in the database, the regression script correctly reports **zero** May Simples differences between the two Parquet partitions.
 
 ### 37.5 Municipality Code Mapping
+
 - **Exported Column:** `cd_mun` (IBGE municipality code).
 - **Mapping Source File:** `munic.csv` (committed and tracked in repository).
 - **Mapping Script:** `code/update_munic_ibge.py` loading exactly **`5,572` rows** into `public.munic`.
 - **Validation Result:** Exactly **0** null/unmapped municipality codes in the final exported SP partitions (May, June, and July).
 
 ### 37.6 Parquet Schema & Ordering
+
 - **Canonical Row Ordering:** `cnpj_basico, cnpj_ordem, cnpj_dv` (ordered alphabetically by unique establishment key).
 - **Export Configuration:** PyArrow ParquetWriter with Snappy compression.
 - **Reproducibility:** Re-exporting the exact same database state twice generates 100% byte-identical Parquet files with matching MD5 signatures.
 - **Exported Partitions Metadata:**
-  - `reconstructed_panel/reference_month=2023-05/part-000.parquet`: 16,253,954 rows, 412,060,047 bytes, MD5 `2bd8e77e7905b3e3328261aa5883632f`.
-  - `reconstructed_panel/reference_month=2023-06/part-000.parquet`: 16,346,048 rows, 415,020,382 bytes, MD5 `0935c5db865c01d154fa987dc3f18560`.
-  - `reconstructed_panel/reference_month=2023-07/part-000.parquet`: 16,444,394 rows, 418,291,349 bytes, MD5 `3c7551207724bb40345a0c47b688445a`.
+    - `reconstructed_panel/reference_month=2023-05/part-000.parquet`: 16,253,954 rows, 412,060,047 bytes, MD5 `2bd8e77e7905b3e3328261aa5883632f`.
+    - `reconstructed_panel/reference_month=2023-06/part-000.parquet`: 16,346,048 rows, 415,020,382 bytes, MD5 `0935c5db865c01d154fa987dc3f18560`.
+    - `reconstructed_panel/reference_month=2023-07/part-000.parquet`: 16,444,394 rows, 418,291,349 bytes, MD5 `3c7551207724bb40345a0c47b688445a`.
 
 ### 37.7 Validation & Regression Artifacts
+
 - **Regression Baseline:** `reconstructed_panel_audited/` (freshly regenerated from TRUE CORE commit `d924aa9` as the regression reference baseline).
 - **Cleanup Output:** `reconstructed_panel/`.
 - **Regression Script:** `code/regression_comparison.py` comparing by unique key `cnpj_basico, cnpj_ordem, cnpj_dv`.
 - **Regression results:** `0 unexpected differences` across all months.
 
 ### 37.8 Integration-Test Status
+
 - **Command:** `.venv/bin/python code/test_incremental.py`
 - **Result:** `All test validations passed successfully!` (including Test 14 Replay).
-
-
