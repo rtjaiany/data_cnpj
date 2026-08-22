@@ -44,8 +44,9 @@ conn = psycopg2.connect(
     dbname=db_name, user=db_user, host=db_host, port=db_port, password=db_pass
 )
 
-# Enforce exact 8 validated establishment fields
-validated_fields = [
+# Strict equality fields (must match 100% on all records)
+strict_equality_fields = [
+    # 8 validated establishment fields
     'identificador_matriz_filial',
     'situacao_cadastral',
     'data_situacao_cadastral',
@@ -53,10 +54,26 @@ validated_fields = [
     'pais',
     'data_inicio_atividade',
     'cnae_fiscal_principal',
-    'municipio'
+    'municipio',
+    # Other establishment fields
+    'cnae_fiscal_secundaria',
+    'situacao_especial',
+    'data_situacao_especial',
+    'uf',
+    'cd_mun',
+    # Socio fields
+    'qtde_socios',
+    'qtde_socios_pf',
+    'qtde_socios_pj',
+    'qtde_socios_estrangeiro',
+    'min_faixa_etaria',
+    'max_faixa_etaria',
+    'data_entrada_antiga',
+    'data_entrada_recente',
+    'qtde_administradores'
 ]
 
-# Designated company fields and Simples/MEI fields
+# Designated company fields and Simples/MEI fields (affected by quarantine/recovery)
 quarantined_company_fields = [
     'capital_social',
     'natureza_juridica',
@@ -128,7 +145,10 @@ def run_regression_for_month(month):
     df_cln = pd.read_parquet(cleanup_file)
     
     print(f"Audited rows: {len(df_aud)} | Cleanup rows: {len(df_cln)}")
-    
+    if len(df_aud) != len(df_cln):
+        print("FAIL: Monthly populations differ!")
+        sys.exit(1)
+        
     # Construct unique establishment keys
     print("Constructing indexes...")
     df_aud['key'] = df_aud['cnpj_basico'] + '-' + df_aud['cnpj_ordem'] + '-' + df_aud['cnpj_dv']
@@ -136,88 +156,43 @@ def run_regression_for_month(month):
     
     aud_keys = set(df_aud['key'])
     cln_keys = set(df_cln['key'])
-    common_keys = aud_keys & cln_keys
-    audited_only = aud_keys - cln_keys
-    cleanup_only = cln_keys - aud_keys
+    
+    if aud_keys != cln_keys:
+        print("FAIL: Establishment key sets are NOT identical!")
+        print(f"Keys in audited but not in cleanup: {len(aud_keys - cln_keys)}")
+        print(f"Keys in cleanup but not in audited: {len(cln_keys - aud_keys)}")
+        sys.exit(1)
+    print("PASS: Establishment key sets match 100% exactly.")
     
     # Index both dataframes by key
-    df_aud = df_aud.set_index('key')
-    df_cln = df_cln.set_index('key')
+    df_aud = df_aud.set_index('key').sort_index()
+    df_cln = df_cln.set_index('key').sort_index()
     
-    # Validate audited_only (move-outs): must have uf != 'SP' in df_aud
-    allowed_move_outs = 0
-    for key in audited_only:
-        uf = df_aud.loc[key, 'uf']
-        if uf != 'SP':
-            allowed_move_outs += 1
-        else:
-            print(f"FAIL: Key {key} is present in audited only but has uf = 'SP'!")
-            sys.exit(1)
-            
-    # Validate cleanup_only (move-ins): must have uf == 'SP' in df_cln
-    allowed_move_ins = 0
-    for key in cleanup_only:
-        uf = df_cln.loc[key, 'uf']
-        if uf == 'SP':
-            allowed_move_ins += 1
-        else:
-            print(f"FAIL: Key {key} is present in cleanup only but has uf = '{uf}'!")
-            sys.exit(1)
-            
-    print(f"PASS: Key discrepancy validated: {allowed_move_outs} allowed move-outs, {allowed_move_ins} allowed move-ins.")
-    
-    # Filter to common keys and sort
-    df_aud = df_aud.loc[list(common_keys)].sort_index()
-    df_cln = df_cln.loc[list(common_keys)].sort_index()
-    
-    # Verify UF (geographic membership) matches for common keys
-    if not (df_aud['uf'] == df_cln['uf']).all():
-        print("FAIL: Geographic membership (UF) differs for some common establishments!")
-        sys.exit(1)
-    print("PASS: Geographic membership (UF) matches exactly for common establishments.")
-    
-    # Verify the eight validated establishment fields exactly
-    print("Checking 8 validated establishment fields...")
-    for field in validated_fields:
+    # Verify strict equality fields
+    print("Checking strict equality fields (establishment, geographic, socio)...")
+    for field in strict_equality_fields:
         mismatch_mask = df_aud[field] != df_cln[field]
-        # Treat NaNs as equal if they are both null
         mismatch_mask = mismatch_mask & ~(df_aud[field].isna() & df_cln[field].isna())
         
-        mismatches = mismatch_mask.sum()
-        if mismatches > 0:
-            print(f"FAIL: Field '{field}' has {mismatches} unexpected differences!")
-            print(df_aud.loc[mismatch_mask, [field]].head())
-            print(df_cln.loc[mismatch_mask, [field]].head())
-            sys.exit(1)
-    print("PASS: All 8 validated establishment fields match exactly.")
+        diff_keys = df_aud.index[mismatch_mask]
+        for key in diff_keys:
+            val_aud = df_aud.loc[key, field]
+            val_cln = df_cln.loc[key, field]
+            if not check_equal(val_aud, val_cln):
+                print(f"FAIL: Strict field '{field}' has unexpected difference for '{key}': audited='{val_aud}', cleanup='{val_cln}'")
+                sys.exit(1)
+    print("PASS: All strict establishment, geographic, and socio fields match 100% exactly.")
     
-    # Count other fields differences (Company, Simples/MEI, and Socios)
+    # Count other field differences (Company and Simples/MEI)
     allowed_quarantine_diffs = 0
     allowed_simples_diffs = 0
-    allowed_loop_diffs = 0
     unexpected_diffs = 0
+    allowed_diffs_log = []
     
-    print("Checking company-level, Simples/MEI, and socio fields...")
+    print("Checking company-level and Simples/MEI fields...")
     
-    # Collect all roots that changed simples status in May
-    changed_simples_roots = []
-    if month == '2023-05':
-        for col in simples_mei_fields:
-            mismatch_mask = df_aud[col] != df_cln[col]
-            mismatch_mask = mismatch_mask & ~(df_aud[col].isna() & df_cln[col].isna())
-            changed_simples_roots.extend(df_cln.loc[mismatch_mask, 'cnpj_basico'].tolist())
-        changed_simples_roots = list(set(changed_simples_roots) - quarantined_roots)
-        db_simples = load_simples_from_db(changed_simples_roots)
-    else:
-        db_simples = {}
- 
     # Check columns
-    socio_fields = [
-        'qtde_socios', 'qtde_socios_pf', 'qtde_socios_pj', 'qtde_socios_estrangeiro',
-        'min_faixa_etaria', 'max_faixa_etaria', 'data_entrada_antiga', 'data_entrada_recente',
-        'qtde_administradores'
-    ]
-    all_check_cols = quarantined_company_fields + simples_mei_fields + socio_fields + ['cd_mun']
+    all_check_cols = quarantined_company_fields + simples_mei_fields
     
     for col in all_check_cols:
         mismatch_mask = df_aud[col] != df_cln[col]
@@ -233,82 +208,60 @@ def run_regression_for_month(month):
             if cnpj_basico in quarantined_roots:
                 if pd.isna(cln_val):
                     allowed_quarantine_diffs += 1
+                    allowed_diffs_log.append({
+                        'month': month,
+                        'key': key,
+                        'cnpj_basico': cnpj_basico,
+                        'column': col,
+                        'core_value': str(aud_val),
+                        'cleanup_value': str(cln_val),
+                        'reason': 'Quarantine resolution to NULL'
+                    })
                 else:
                     print(f"FAIL: Quarantined company root {cnpj_basico} has non-NULL value in cleanup: {col}={cln_val}")
                     unexpected_diffs += 1
-            # Case B: May Simples/MEI recovery
-            elif month == '2023-05' and col in simples_mei_fields:
-                if pd.isna(aud_val):
-                    # Check against database simples table
-                    db_entry = db_simples.get(cnpj_basico)
-                    if db_entry:
-                        db_val = db_entry.get(col)
-                        if check_equal(db_val, cln_val):
-                            allowed_simples_diffs += 1
-                        else:
-                            print(f"FAIL: May Simples recovery mismatch for {cnpj_basico}: col={col}, cln={cln_val}, db={db_val}")
-                            unexpected_diffs += 1
-                    else:
-                        print(f"FAIL: May Simples change for {cnpj_basico} but root not found in public.simples!")
-                        unexpected_diffs += 1
-                else:
-                    print(f"FAIL: Unexpected May Simples overwrite for {cnpj_basico}: col={col}, aud={aud_val}, cln={cln_val}")
-                    unexpected_diffs += 1
-            # Case C: cd_mun column (allowed to be matched since we load it from committed mapping)
-            elif col == 'cd_mun':
-                # Just verify that it is populated and not unexpectedly differing if already matched
-                if pd.isna(aud_val) and not pd.isna(cln_val):
-                    # Allowed match
-                    pass
-                elif check_equal(aud_val, cln_val):
-                    pass
-                else:
-                    print(f"FAIL: cd_mun discrepancy for {key}: aud={aud_val}, cln={cln_val}")
-                    unexpected_diffs += 1
-            # Case D: June/July loop architecture differences in company/simples/socio fields
-            elif month != '2023-05' and col in (quarantined_company_fields + simples_mei_fields + socio_fields):
-                allowed_loop_diffs += 1
             else:
                 print(f"FAIL: Forbidden difference in field '{col}' for establishment '{key}': audited='{aud_val}', cleanup='{cln_val}'")
                 unexpected_diffs += 1
                 
     print(f"Allowed quarantine differences: {allowed_quarantine_diffs}")
     print(f"Allowed Simples/MEI differences: {allowed_simples_diffs}")
-    print(f"Allowed loop architectural differences: {allowed_loop_diffs}")
     print(f"Unexpected differences: {unexpected_diffs}")
     
+    if len(allowed_diffs_log) > 0:
+        print(f"\nDetail of Allowed Differences for {month} (first 10 rows):")
+        print(pd.DataFrame(allowed_diffs_log).head(10).to_string(index=False))
+        
     if unexpected_diffs > 0:
         print("FAIL: Regression check failed due to unexpected differences.")
         sys.exit(1)
         
     print(f"PASS: Monthly regression gate completed successfully for {month}!")
-    return allowed_simples_diffs
+    return allowed_quarantine_diffs
 
 def main():
     try:
-        load_simples_diffs = run_regression_for_month('2023-05')
+        run_regression_for_month('2023-05')
         run_regression_for_month('2023-06')
         run_regression_for_month('2023-07')
         
-        # Verify the exact 68,950 May recovery expectation
-        print("\nChecking May Simples recovery count...")
-        df_aud = pd.read_parquet(os.path.join(parent_dir, "reconstructed_panel_audited", "reference_month=2023-05", "part-000.parquet"))
+        # Verify the exact 68,950 May recovery expectation against raw Simples CSV
+        print("\nChecking May Simples recovery count against raw files...")
+        raw_simples_file = os.path.join(parent_dir, "EXTRACTED_FILES", "F.K03200$W.SIMPLES.CSV.D30513")
+        if not os.path.isfile(raw_simples_file):
+            print(f"Error: Raw Simples file not found at {raw_simples_file}")
+            sys.exit(1)
+            
+        print("Reading skipped roots from raw Simples file...")
+        df_raw_skipped = pd.read_csv(raw_simples_file, sep=';', skiprows=35000000, header=None, usecols=[0], dtype=str)
+        skipped_roots = set(df_raw_skipped[0].dropna().tolist())
+        
+        print("Reading cleanup May Parquet...")
         df_cln = pd.read_parquet(os.path.join(parent_dir, "reconstructed_panel", "reference_month=2023-05", "part-000.parquet"))
         
-        df_aud['key'] = df_aud['cnpj_basico'] + '-' + df_aud['cnpj_ordem'] + '-' + df_aud['cnpj_dv']
-        df_cln['key'] = df_cln['cnpj_basico'] + '-' + df_cln['cnpj_ordem'] + '-' + df_cln['cnpj_dv']
-        df_aud = df_aud.set_index('key')
-        df_cln = df_cln.set_index('key')
-        
-        common_keys = set(df_aud.index) & set(df_cln.index)
-        df_aud = df_aud.loc[list(common_keys)]
-        df_cln = df_cln.loc[list(common_keys)]
-        
-        aud_null = df_aud['opcao_pelo_simples'].isna()
-        cln_non_null = ~df_cln['opcao_pelo_simples'].isna()
-        recovered_mask = aud_null & cln_non_null
-        
-        recovered_roots = df_cln.loc[recovered_mask, 'cnpj_basico'].nunique()
+        # Count unique recovered roots in cleanup May panel
+        recovered_est = df_cln[df_cln['opcao_pelo_simples'].notna() & df_cln['cnpj_basico'].isin(skipped_roots)]
+        recovered_roots = recovered_est['cnpj_basico'].nunique()
         print(f"Distinct company roots recovered in May: {recovered_roots}")
         
         if recovered_roots != 68950:
