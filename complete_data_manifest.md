@@ -577,3 +577,50 @@ ORDER BY reference_month;
 ## 36. Core Methodological Statement
 
 > **The pipeline preserves useful source information while defining a narrower validated analytical state for temporal comparison. The analytical event definition is based exclusively on the validated analytical state. Therefore, changes in preserved non-analytical fields—such as address changes—remain available in the delivered dataset but do not automatically constitute analytical UPDATEs. This separation prevents non-analytical changes from generating false UPDATE classifications or preventing the May → June → July reconstruction from matching the analytical benchmark, while preserving potentially useful information for future analyses and auditability.**
+
+---
+
+## 37. Post-Validation Cleanup & Provenance Appendix
+
+This appendix documents the final post-validation cleanup work and baseline provenance checks.
+
+### 37.1 Version Control and Provenance
+- **TRUE Accepted CORE Commit:** `d924aa97fbfca074a9d63395dc39c87f15b62f0d` (the geographic transition and national memory architecture validated by the independent auditor).
+- **Post-Validation Cleanup Commit:** `30fd35fcd9185a7301c3e39031efee804ce35489` (quarantine update, simples division fix, deterministic ordering, and municipality mapping).
+- **Reconstruction Difference:** The TRUE CORE version represents the geo-transition fixed loop. The Cleanup version applies the quarantine transformations on top of this validated loop.
+
+### 37.2 Output Scope & Geographic Generality
+- **Validation Target Population:** State of São Paulo (`uf = 'SP'`) for May, June, and July 2023.
+- **Loop Generality:** The stored procedure `analytics.reconstruct_panel` resolves the database state and replays updates **nationally** in memory, and the state-level population filtering (`SP`) is strictly applied at the final output-append layer. The pipeline is designed to support national panel generation or arbitrary sub-national state partitions.
+
+### 37.3 Company-Level Quarantine
+- **Database Table:** `analytics.quarantine_empresa`.
+- **Target Company Roots (`cnpj_basico`):** `11895269` and `42938862`.
+- **Quarantine Scope:** Applied consistently across all target months and partitions. It is month-independent and independent of geographic filtering.
+- **Affected Company Fields:** `capital_social`, `natureza_juridica`, `porte_empresa`, `qualificacao_responsavel`, `ente_federativo_responsavel`.
+- **Affected Simples/MEI Fields:** `opcao_pelo_simples`, `data_opcao_simples`, `data_exclusao_simples`, `opcao_mei`, `data_opcao_mei`, `data_exclusao_mei`.
+- **Observed cell differences:** In June and July, exactly **17 establishments** belonging to the quarantined company roots had **4 columns** (`capital_social`, `natureza_juridica`, `porte_empresa`, `qualificacao_responsavel`) set to `NULL`, resulting in exactly **68 cell differences** resolved to NULL.
+- **Generic Conflict Handling:** Maintained through generic SQL queries checking for mismatching company details during staging. Future conflicting company roots will be dynamically identified, logged to the quarantine table, and nullified.
+
+### 37.4 May Simples/MEI Baseline Ingestion Provenance
+- **Raw File Source:** `F.K03200$W.SIMPLES.CSV.D30513` containing exactly `35,333,872` records.
+- **Ceiling Division Correction:** Corrected rounded-down chunking in `code/ETL_coletar_dados_e_gravar_BD.py` to ceiling division: `(simples_lenght + tamanho_das_partes - 1) // tamanho_das_partes`.
+- **Database Count:** Exactly `35,333,872` records reloaded in `public.simples`.
+- **May Recovery Validation:** Exactly **`68,950`** distinct company roots in the May panel were verified against the raw skipped CSV records.
+- **Regression Behavior:** Because both the TRUE CORE baseline and the cleanup reconstruction were generated *after* correcting `public.simples` in the database, the regression script correctly reports **zero** May Simples differences between the two Parquet partitions.
+
+### 37.5 Municipality Code Mapping
+- **Exported Column:** `cd_mun` (IBGE municipality code).
+- **Mapping Source File:** `munic.csv` (committed and tracked in repository).
+- **Mapping Script:** `code/update_munic_ibge.py` loading exactly **`5,572` rows** into `public.munic`.
+- **Validation Result:** Exactly **0** null/unmapped municipality codes in the final exported SP partitions.
+
+### 37.6 Parquet Schema & Ordering
+- **Canonical Row Ordering:** `cnpj_basico, cnpj_ordem, cnpj_dv` (ordered alphabetically by unique establishment key).
+- **Export Configuration:** PyArrow ParquetWriter with Snappy compression.
+- **Reproducibility:** Re-exporting the exact same database state twice generates 100% byte-identical Parquet files with matching MD5 signatures.
+- **Exported Partitions Metadata:**
+  - `reconstructed_panel/reference_month=2023-05/part-000.parquet`: 16,253,954 rows, 412,060,047 bytes, MD5 `2bd8e77e7905b3e3328261aa5883632f`.
+  - `reconstructed_panel/reference_month=2023-06/part-000.parquet`: 16,346,048 rows, 415,020,382 bytes, MD5 `0935c5db865c01d154fa987dc3f18560`.
+  - `reconstructed_panel/reference_month=2023-07/part-000.parquet`: 16,444,394 rows, 418,291,349 bytes, MD5 `3c7551207724bb40345a0c47b688445a`.
+
