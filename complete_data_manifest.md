@@ -585,9 +585,9 @@ ORDER BY reference_month;
 This appendix documents the final post-validation cleanup work and baseline provenance checks.
 
 ### 37.1 Version Control and Provenance
-- **TRUE Accepted CORE Commit:** `d924aa97fbfca074a9d63395dc39c87f15b62f0d` (the geographic transition and national memory architecture validated by the independent auditor).
+- **TRUE Accepted CORE Commit:** `d924aa97fbfca074a9d63395dc39c87f15b62f0d` (the accepted geographic transition and national memory architecture validated by the independent auditor).
 - **Post-Validation Cleanup Commit:** `30fd35fcd9185a7301c3e39031efee804ce35489` (quarantine update, simples division fix, deterministic ordering, and municipality mapping).
-- **Reconstruction Difference:** The TRUE CORE version represents the geo-transition fixed loop. The Cleanup version applies the quarantine transformations on top of this validated loop.
+- **Reconstruction Difference:** The TRUE CORE version represents the geo-transition fixed loop. The Cleanup version is a post-validation cleanup layer whose immutable reconstruction behavior was regression-tested against the accepted CORE.
 
 ### 37.2 Output Scope & Geographic Generality
 - **Validation Target Population:** State of São Paulo (`uf = 'SP'`) for May, June, and July 2023.
@@ -613,7 +613,7 @@ This appendix documents the final post-validation cleanup work and baseline prov
 - **Exported Column:** `cd_mun` (IBGE municipality code).
 - **Mapping Source File:** `munic.csv` (committed and tracked in repository).
 - **Mapping Script:** `code/update_munic_ibge.py` loading exactly **`5,572` rows** into `public.munic`.
-- **Validation Result:** Exactly **0** null/unmapped municipality codes in the final exported SP partitions.
+- **Validation Result:** Exactly **0** null/unmapped municipality codes in the final exported SP partitions (May, June, and July).
 
 ### 37.6 Parquet Schema & Ordering
 - **Canonical Row Ordering:** `cnpj_basico, cnpj_ordem, cnpj_dv` (ordered alphabetically by unique establishment key).
@@ -623,4 +623,15 @@ This appendix documents the final post-validation cleanup work and baseline prov
   - `reconstructed_panel/reference_month=2023-05/part-000.parquet`: 16,253,954 rows, 412,060,047 bytes, MD5 `2bd8e77e7905b3e3328261aa5883632f`.
   - `reconstructed_panel/reference_month=2023-06/part-000.parquet`: 16,346,048 rows, 415,020,382 bytes, MD5 `0935c5db865c01d154fa987dc3f18560`.
   - `reconstructed_panel/reference_month=2023-07/part-000.parquet`: 16,444,394 rows, 418,291,349 bytes, MD5 `3c7551207724bb40345a0c47b688445a`.
+
+### 37.7 Validation & Regression Artifacts
+- **Regression Baseline:** `reconstructed_panel_audited/` (freshly regenerated from TRUE CORE commit `d924aa9` as the regression reference baseline).
+- **Cleanup Output:** `reconstructed_panel/`.
+- **Regression Script:** `code/regression_comparison.py` comparing by unique key `cnpj_basico, cnpj_ordem, cnpj_dv`.
+- **Regression results:** `0 unexpected differences` across all months.
+
+### 37.8 Integration-Test Status
+- **Command:** `.venv/bin/python code/test_incremental.py`
+- **Result:** `All test validations passed successfully!` (including Test 14 Replay).
+
 
