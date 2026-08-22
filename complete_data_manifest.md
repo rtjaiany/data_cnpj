@@ -490,9 +490,9 @@ graph TD
 
 | File / Partition | Row Count | File Size (Bytes) | MD5 Checksum |
 | :--- | ---: | ---: | :--- |
-| `reconstructed_panel_audited/reference_month=2023-05/part-000.parquet` | 16,253,954 | 411,820,460 | `1954e95ef3a6613fcc62c691c3c3882e` |
-| `reconstructed_panel_audited/reference_month=2023-06/part-000.parquet` | 16,346,167 | 415,756,803 | `26309c8d5f36bac7554918db2287e533` |
-| `reconstructed_panel_audited/reference_month=2023-07/part-000.parquet` | 16,444,711 | 419,482,743 | `e05d221257717c24fd8087bcc0d11e9b` |
+| `reconstructed_panel_audited/reference_month=2023-05/part-000.parquet` | 16,253,954 | 412,060,047 | `2bd8e77e7905b3e3328261aa5883632f` |
+| `reconstructed_panel_audited/reference_month=2023-06/part-000.parquet` | 16,346,048 | 415,017,956 | `769d4394e581daa1d12650d5a89d4534` |
+| `reconstructed_panel_audited/reference_month=2023-07/part-000.parquet` | 16,444,394 | 418,291,284 | `8ae8b0a749452372982e342994836224` |
 
 ---
 
