@@ -225,25 +225,64 @@ def main():
     
         print(f"Listing WebDAV files for {data_folder} from: {webdav_url}")
         headers = {"X-Requested-With": "XMLHttpRequest", "Depth": "1"}
-        response = requests.request("PROPFIND", webdav_url, auth=(token, ""), headers=headers)
+        response = requests.request("PROPFIND", webdav_url, auth=(token, ""), headers=headers, timeout=(30, 60))
         if response.status_code != 207:
             print(f"Error: Cannot access folder {data_folder} on Nextcloud server! Status: {response.status_code}")
             cur.close()
             conn.close()
             sys.exit(1)
         
+        import re
         root = ET.fromstring(response.content)
         ns = {"d": "DAV:"}
-        files_to_download = []
+        
+        all_zip_files = [] # list of (filename, size)
         for resp in root.findall(".//d:response", ns):
             href = resp.find("d:href", ns)
             if href is not None:
                 path = href.text
                 if path.endswith(".zip"):
-                    files_to_download.append(os.path.basename(path))
+                    filename = os.path.basename(path)
+                    
+                    size = 0
+                    propstat = resp.find("d:propstat", ns)
+                    if propstat is not None:
+                        prop = propstat.find("d:prop", ns)
+                        if prop is not None:
+                            len_node = prop.find("d:getcontentlength", ns)
+                            if len_node is not None:
+                                try:
+                                    size = int(len_node.text)
+                                except Exception:
+                                    pass
+                    all_zip_files.append((filename, size))
+                    
+        # Group zip files by part key to handle duplicate/revised uploads
+        grouped_files = {}
+        for filename, size in all_zip_files:
+            match = re.search(r'(estabelecimentos|empresas|socios|simples|cnaes|motivos|municipios|naturezas|paises|qualificacoes)\d*', filename, re.IGNORECASE)
+            if not match:
+                print(f"Skipping non-standard file: {filename} ({size/(1024*1024):.2f} MB)")
+                continue
+            part_key = match.group(0).lower()
+            
+            if part_key not in grouped_files:
+                grouped_files[part_key] = []
+            grouped_files[part_key].append((filename, size))
+            
+        files_to_download = []
+        for part_key, file_list in grouped_files.items():
+            if len(file_list) > 1:
+                file_list.sort(key=lambda x: x[1], reverse=True)
+                chosen_file, chosen_size = file_list[0]
+                ignored_files = [f[0] for f in file_list[1:]]
+                print(f"Deduplication for {part_key}: keeping {chosen_file} ({chosen_size/(1024*1024):.2f} MB), ignoring {ignored_files}")
+                files_to_download.append(chosen_file)
+            else:
+                files_to_download.append(file_list[0][0])
                 
         files_to_download.sort()
-        print(f"Found {len(files_to_download)} files in Nextcloud WebDAV directory.")
+        print(f"Found {len(all_zip_files)} zip files on Nextcloud, deduplicated to {len(files_to_download)} files to process.")
     
         # Save checkpoint month info
         download_month_file = os.path.join(output_files, ".download_month")
@@ -262,11 +301,24 @@ def main():
                 cur.execute(f"CREATE TABLE staging_{t} (LIKE {t});")
                 conn.commit()
 
-        # Truncate staging tables once at the start of a fresh month (to accumulate multi-part files)
+        # Truncate staging tables once at the start of a fresh month or reset if staging state is inconsistent
         cur.execute("SELECT COUNT(*) FROM processed_files WHERE file_path LIKE %s", (f"{data_folder}/%",))
         checkpoint_cnt = cur.fetchone()[0]
-        if checkpoint_cnt == 0:
-            print(f"Fresh run for {data_folder}. Truncating staging tables...")
+        
+        staging_inconsistent = False
+        if checkpoint_cnt > 0:
+            for t in tables_to_create:
+                cur.execute(f"SELECT COUNT(*) FROM staging_{t};")
+                if cur.fetchone()[0] == 0:
+                    staging_inconsistent = True
+                    break
+
+        if checkpoint_cnt == 0 or staging_inconsistent:
+            if staging_inconsistent:
+                print(f"Detected inconsistent staging state for {data_folder} (checkpoints recorded but staging table is empty). Resetting checkpoints and staging tables...")
+                cur.execute("DELETE FROM processed_files WHERE file_path LIKE %s;", (f"{data_folder}/%",))
+            else:
+                print(f"Fresh run for {data_folder}. Truncating staging tables...")
             for t in tables_to_create:
                 cur.execute(f"TRUNCATE TABLE staging_{t};")
             conn.commit()
@@ -287,28 +339,19 @@ def main():
             url = f"{webdav_url}{zip_name}"
             headers_prop = {"X-Requested-With": "XMLHttpRequest"}
             try:
-                head_res = requests.head(url, auth=(token, ""), headers=headers_prop)
+                head_res = requests.head(url, auth=(token, ""), headers=headers_prop, timeout=(30, 60))
                 server_size = int(head_res.headers.get("content-length", 0))
             except Exception as e:
                 print(f"Warning: Cannot head server file {zip_name}: {e}")
                 server_size = 0
             
             download_needed = True
-            resume_header = {}
-            downloaded_bytes = 0
-            write_mode = "wb"
-        
             if server_size > 0 and os.path.exists(local_zip_path):
                 local_size = os.path.getsize(local_zip_path)
                 if local_size == server_size:
                     print(f"File {zip_name} already downloaded and matches server size.")
                     download_needed = False
-                elif local_size < server_size:
-                    print(f"Resuming download from {local_size / (1024*1024):.1f} MB...")
-                    resume_header = {"Range": f"bytes={local_size}-"}
-                    downloaded_bytes = local_size
-                    write_mode = "ab"
-                else:
+                elif local_size > server_size:
                     print(f"Local file size exceeds server size. Restarting download.")
                     try:
                         os.remove(local_zip_path)
@@ -316,12 +359,34 @@ def main():
                         pass
                     
             if download_needed:
-                req_headers = {**headers_prop, **resume_header}
                 max_retries = 5
                 success = False
                 for attempt in range(1, max_retries + 1):
+                    current_local_size = os.path.getsize(local_zip_path) if os.path.exists(local_zip_path) else 0
+                    if server_size > 0 and current_local_size == server_size:
+                        print(f"File {zip_name} already downloaded and matches server size.")
+                        success = True
+                        break
+                    if server_size > 0 and current_local_size > server_size:
+                        print("Local file size exceeds server size. Restarting download.")
+                        try:
+                            os.remove(local_zip_path)
+                        except:
+                            pass
+                        current_local_size = 0
+
+                    req_headers = dict(headers_prop)
+                    if current_local_size > 0:
+                        req_headers["Range"] = f"bytes={current_local_size}-"
+                        write_mode = "ab"
+                        downloaded_bytes = current_local_size
+                        print(f"Resuming download from {current_local_size / (1024*1024):.1f} MB (attempt {attempt}/{max_retries})...")
+                    else:
+                        write_mode = "wb"
+                        downloaded_bytes = 0
+
                     try:
-                        with requests.get(url, auth=(token, ""), headers=req_headers, stream=True) as r:
+                        with requests.get(url, auth=(token, ""), headers=req_headers, stream=True, timeout=(30, 60)) as r:
                             if r.status_code not in [200, 206]:
                                 raise Exception(f"HTTP status code {r.status_code}")
                             

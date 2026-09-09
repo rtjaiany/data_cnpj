@@ -141,4 +141,9 @@ dmypy.json
 *.csv
 !/munic.csv
 /reconstructed_panel/
+/reconstructed_panel_audited/
+scratch_quarantine_*.txt
+.DS_Store
+*.DS_Store
 *.pdf
+
