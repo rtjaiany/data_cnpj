@@ -143,6 +143,7 @@ dmypy.json
 /reconstructed_panel/
 /reconstructed_panel_audited/
 /audit_source_verification/downloads/
+/audit_source_verification/resumable_recovery/
 /audit_source_verification/key_compare/2024-*/
 /audit_source_verification/key_reconcile/*.keys
 /audit_source_verification/opening_date_analysis/*.key_dates

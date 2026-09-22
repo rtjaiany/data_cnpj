@@ -93,6 +93,39 @@ new investigation of the source, parser, or snapshot generation process.
 9. Replace it with an official-source reconstruction only after the official
    files become available and pass the same checks.
 
+## Resumable Preparation Orchestrator
+
+The new English-language orchestrator is `code/run_resumable_recovery.py`. It is
+independent from the original ETL and writes only to
+`audit_source_verification/resumable_recovery/`.
+
+It provides three checkpointed preparation stages:
+
+1. `manifest`: discovers the ten establishment archives for each month and
+   writes `recovery_manifest.json`.
+2. `validate`: validates each ZIP independently, records CRC success, SHA-256,
+   member metadata, and row count, then atomically updates the manifest after
+   each archive.
+3. `keys`: extracts and externally sorts establishment keys one archive at a
+   time, recording completion per archive.
+
+The first two stages have been executed successfully for all 20 archives. A
+second validation run confirmed resume behavior: all archives were reported as
+already complete and were not reprocessed.
+
+Example commands:
+
+```bash
+python code/run_resumable_recovery.py --stage manifest
+python code/run_resumable_recovery.py --stage validate
+python code/run_resumable_recovery.py --stage keys
+```
+
+The `keys` stage should be run only after checking available disk space. It
+creates sorted intermediate key files and can require tens of gigabytes. The
+source ZIPs, original Parquets, production database, and original ETL remain
+unchanged throughout these stages.
+
 ## Acceptance Criteria
 
 The affected months can be treated as provisionally usable only when:
