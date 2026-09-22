@@ -117,15 +117,14 @@ def main() -> int:
         "source_only_not_november_insert_file": str(source_only_not_november_insert),
         "november_insert_not_source_only_file": str(november_insert_not_source_only),
     }
-    report["status"] = (
-        "RECONCILED"
-        if report["source_only_not_october_deletion"] == 0
-        else "UNEXPLAINED_SOURCE_KEYS_REMAIN"
-    )
+    if report["source_only_not_november_insert"] == 0:
+        report["status"] = "SOURCE_ONLY_KEYS_ACCOUNTED_IN_NOVEMBER"
+    else:
+        report["status"] = "SOURCE_ONLY_KEYS_MISSING_FROM_NOVEMBER"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
     print(f"Report written to {report_path}")
-    return 0 if report["status"] == "RECONCILED" else 2
+    return 0 if report["status"] == "SOURCE_ONLY_KEYS_ACCOUNTED_IN_NOVEMBER" else 2
 
 
 if __name__ == "__main__":

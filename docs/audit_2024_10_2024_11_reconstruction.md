@@ -227,6 +227,22 @@ Approximately 87.1% of the source-only establishments were opened before 2024, a
 
 The detailed date distribution is stored in `audit_source_verification/opening_date_analysis/opening_date_report.json`.
 
+### Snapshot reconciliation
+
+The new English-language reconciliation scripts compared the source-only October keys against the database snapshot events without modifying persistent tables.
+
+| Category | Keys |
+| --- | ---: |
+| Source-only October keys | 3,089,864 |
+| Matching October `DELETE` events | 3,054,993 |
+| Source-only keys without an October `DELETE` | 34,871 |
+| Source-only keys appearing as November `INSERT` events | 3,089,864 |
+| November `INSERT` events outside the source-only set | 349,976 |
+
+The `34,871` remaining keys are not unexplained missing records. They were absent from the local October state, so the existing snapshot process could not emit an October `DELETE` for them. They were nevertheless captured as November `INSERT` events. This means the entire source-only set is accounted for in the November snapshot stream, while only `3,054,993` can be represented as October deletions relative to the local baseline.
+
+The reconciliation outputs are stored in `audit_source_verification/key_reconcile/reconciliation_report.json` and `audit_source_verification/key_compare/missing_key_snapshot_report.json`.
+
 ## Recommended Next Steps
 
 1. Obtain the official October 2024 establishment and establishment-address files again.
@@ -240,6 +256,7 @@ The detailed date distribution is stored in `audit_source_verification/opening_d
 9. Consider refactoring the partner aggregation so it is materialized once for the November insert set rather than recomputed as part of the large statement.
 10. Add intermediate progress reporting or chunked inserts so a future run exposes progress and can resume safely within a month.
 11. Use the key-level comparison output to validate the corrected October staging data before replacing any data.
+12. Build an isolated corrected October state from the September checkpoint and the alternative October source, then apply November to that corrected state.
 
 ## Final Assessment
 

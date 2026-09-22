@@ -1,7 +1,8 @@
 """Compare alternative-source-only establishment keys with October deletes.
 
-The database operation uses a temporary table inside a read-only transaction.
-It does not modify persistent tables, snapshots, Parquet files, or source ZIPs.
+The database operation uses a temporary table inside a transaction that is
+rolled back before the connection closes. It does not modify persistent tables,
+snapshots, Parquet files, or source ZIPs.
 """
 
 from __future__ import annotations
@@ -58,7 +59,6 @@ def main() -> int:
         raise FileNotFoundError(keys_path)
 
     with database_connection() as connection:
-        connection.set_session(readonly=True, autocommit=False)
         with connection.cursor() as cursor:
             cursor.execute(
                 """
