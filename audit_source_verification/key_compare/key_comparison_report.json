@@ -1,0 +1,30 @@
+{
+  "months": [
+    {
+      "month": "2024-10",
+      "source_directory": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-10-16",
+      "source_rows": 62983669,
+      "reference_rows": 59893805,
+      "source_unique_keys": 62983669,
+      "reference_unique_keys": 59893805,
+      "source_only_keys": 3089864,
+      "reference_only_keys": 0,
+      "status": "MISMATCH",
+      "source_only_file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/key_compare/2024-10/source_only.keys",
+      "reference_only_file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/key_compare/2024-10/reference_only.keys"
+    },
+    {
+      "month": "2024-11",
+      "source_directory": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-11-13",
+      "source_rows": 63333645,
+      "reference_rows": 63333645,
+      "source_unique_keys": 63333645,
+      "reference_unique_keys": 63333645,
+      "source_only_keys": 0,
+      "reference_only_keys": 0,
+      "status": "MATCH",
+      "source_only_file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/key_compare/2024-11/source_only.keys",
+      "reference_only_file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/key_compare/2024-11/reference_only.keys"
+    }
+  ]
+}

@@ -1,0 +1,306 @@
+{
+  "source_root": "https://dados-abertos-rf-cnpj.casadosdados.com.br/arquivos/",
+  "generated_at": "2026-09-14T10:34:37-0400",
+  "download_dir": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads",
+  "reference_dir": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/ignored_fields/estabelecimento",
+  "months": [
+    {
+      "source_directory": "2024-10-16",
+      "archives": [
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-10-16/Estabelecimentos0.zip",
+          "bytes": 1467775320,
+          "sha256": "7ed0192215fc93889f5f8162d8caef1aad3235883280e9acff1c059f2b61e71a",
+          "members": [
+            {
+              "name": "K3241.K03200Y0.D41012.ESTABELE",
+              "compressed_bytes": 1467775130,
+              "rows": 20202754
+            }
+          ],
+          "rows": 20202754,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-10-16/Estabelecimentos1.zip",
+          "bytes": 339315048,
+          "sha256": "2748f8f048da18e0069e9fa33a3ec7a5c47e9b523f88accf10581a447534eb28",
+          "members": [
+            {
+              "name": "K3241.K03200Y1.D41012.ESTABELE",
+              "compressed_bytes": 339314890,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-10-16/Estabelecimentos2.zip",
+          "bytes": 336430332,
+          "sha256": "2adf4373aadc27467222558e4f70de4ecd2132e9c98854876636020896738409",
+          "members": [
+            {
+              "name": "K3241.K03200Y2.D41012.ESTABELE",
+              "compressed_bytes": 336430174,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-10-16/Estabelecimentos3.zip",
+          "bytes": 337103225,
+          "sha256": "66bd97f43d88651677680eb8f28eb5a003bfb586ddee7fca3604e8dc7a2fc9ad",
+          "members": [
+            {
+              "name": "K3241.K03200Y3.D41012.ESTABELE",
+              "compressed_bytes": 337103067,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-10-16/Estabelecimentos4.zip",
+          "bytes": 364108738,
+          "sha256": "bcf03928fe753ea451227a236bad1238d842c76accc37c32555bc4982dc446e1",
+          "members": [
+            {
+              "name": "K3241.K03200Y4.D41012.ESTABELE",
+              "compressed_bytes": 364108580,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-10-16/Estabelecimentos5.zip",
+          "bytes": 341303171,
+          "sha256": "1b84b9dd33553d08e972c55cac07b0c134433390ef35e77a420975e320ed19b7",
+          "members": [
+            {
+              "name": "K3241.K03200Y5.D41012.ESTABELE",
+              "compressed_bytes": 341303013,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-10-16/Estabelecimentos6.zip",
+          "bytes": 336974126,
+          "sha256": "e4c91c989dff888490e669448437311cb3bc16c7aa1b61add774d6fc59e02e60",
+          "members": [
+            {
+              "name": "K3241.K03200Y6.D41012.ESTABELE",
+              "compressed_bytes": 336973968,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-10-16/Estabelecimentos7.zip",
+          "bytes": 336710274,
+          "sha256": "8f3f7716eb592c0e1191e0348bccc7f329a8a8543d1175e1fa8961d0d2f67834",
+          "members": [
+            {
+              "name": "K3241.K03200Y7.D41012.ESTABELE",
+              "compressed_bytes": 336710116,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-10-16/Estabelecimentos8.zip",
+          "bytes": 362089144,
+          "sha256": "76ee5428ae6b549a78f7a68b4c56a9e989c58d6a3059d7a7dca29e08fdd582bf",
+          "members": [
+            {
+              "name": "K3241.K03200Y8.D41012.ESTABELE",
+              "compressed_bytes": 362088986,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-10-16/Estabelecimentos9.zip",
+          "bytes": 343480647,
+          "sha256": "9dcb5621340351ad765597ffcbd9fc196d1d119702a636b6c7f75c5d25e97e63",
+          "members": [
+            {
+              "name": "K3241.K03200Y9.D41012.ESTABELE",
+              "compressed_bytes": 343480489,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        }
+      ],
+      "source_rows": 62983669,
+      "reference_parquet_rows": 59893805,
+      "row_difference_source_minus_reference": 3089864,
+      "status": "MISMATCH"
+    },
+    {
+      "source_directory": "2024-11-13",
+      "archives": [
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-11-13/Estabelecimentos0.zip",
+          "bytes": 1495627203,
+          "sha256": "8f47541b8a85d1c9223d0eff44df3a36db5bf1fa8093dccf51b5ae6091c88290",
+          "members": [
+            {
+              "name": "K3241.K03200Y0.D41109.ESTABELE",
+              "compressed_bytes": 1495627013,
+              "rows": 20552730
+            }
+          ],
+          "rows": 20552730,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-11-13/Estabelecimentos1.zip",
+          "bytes": 339457117,
+          "sha256": "4d2ad4601a647dc4602b11abd88197e3b0a6d7e5051c5cc7f358db78f753646d",
+          "members": [
+            {
+              "name": "K3241.K03200Y1.D41109.ESTABELE",
+              "compressed_bytes": 339456959,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-11-13/Estabelecimentos2.zip",
+          "bytes": 336218492,
+          "sha256": "fd92f7ce367e43eb4719e7273d8ba2710a8904d871c25f8abf249d4c982301d5",
+          "members": [
+            {
+              "name": "K3241.K03200Y2.D41109.ESTABELE",
+              "compressed_bytes": 336218334,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-11-13/Estabelecimentos3.zip",
+          "bytes": 338274154,
+          "sha256": "3d9c697e4e92443c47683ab212ef8ce1bf5db3e06d41e658e853b1e3633da887",
+          "members": [
+            {
+              "name": "K3241.K03200Y3.D41109.ESTABELE",
+              "compressed_bytes": 338273996,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-11-13/Estabelecimentos4.zip",
+          "bytes": 364729482,
+          "sha256": "ebb0f3e62b6b3cf6d1e4939f89a4db4104d718cbd331db757fb3781c5a51cc3e",
+          "members": [
+            {
+              "name": "K3241.K03200Y4.D41109.ESTABELE",
+              "compressed_bytes": 364729324,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-11-13/Estabelecimentos5.zip",
+          "bytes": 339602573,
+          "sha256": "7dbbd999bb490d4c7cffbc5d115fe13064e1724c5f2d4a65f0fddae5cf2c9544",
+          "members": [
+            {
+              "name": "K3241.K03200Y5.D41109.ESTABELE",
+              "compressed_bytes": 339602415,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-11-13/Estabelecimentos6.zip",
+          "bytes": 336428756,
+          "sha256": "a1f1096960e1fab1a8607b0cf81d5b655b8c0aa1d75932ed9a7aedd06b65378f",
+          "members": [
+            {
+              "name": "K3241.K03200Y6.D41109.ESTABELE",
+              "compressed_bytes": 336428598,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-11-13/Estabelecimentos7.zip",
+          "bytes": 337910495,
+          "sha256": "3d0f5c4926cb32b00e4929eccbf64dca9730c87795bf7f71912f3838960a6158",
+          "members": [
+            {
+              "name": "K3241.K03200Y7.D41109.ESTABELE",
+              "compressed_bytes": 337910337,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-11-13/Estabelecimentos8.zip",
+          "bytes": 364708246,
+          "sha256": "7ae23e1431cc2124387f8c3c87d4ca0609133c6dc7ab85c254f269dfe447c6e5",
+          "members": [
+            {
+              "name": "K3241.K03200Y8.D41109.ESTABELE",
+              "compressed_bytes": 364708088,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        },
+        {
+          "file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/downloads/2024-11-13/Estabelecimentos9.zip",
+          "bytes": 339907684,
+          "sha256": "38ac5e0e0ad5ea51284b1a8d6b43400b8449cc4f5b8e61d38bb512689898e19a",
+          "members": [
+            {
+              "name": "K3241.K03200Y9.D41109.ESTABELE",
+              "compressed_bytes": 339907526,
+              "rows": 4753435
+            }
+          ],
+          "rows": 4753435,
+          "listing": ""
+        }
+      ],
+      "source_rows": 63333645,
+      "reference_parquet_rows": 63333645,
+      "row_difference_source_minus_reference": 0,
+      "status": "MATCH"
+    }
+  ]
+}
