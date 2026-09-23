@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_SOURCE_ROOT = "audit_source_verification/downloads"
+DEFAULT_SOURCE_ROOT = "audit_source_verification/official_downloads"
 DEFAULT_WORK_ROOT = "audit_source_verification/resumable_recovery"
 
 

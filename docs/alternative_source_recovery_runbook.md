@@ -1,140 +1,76 @@
-# Alternative Source Recovery Runbook
+# Official Source Reconstruction Runbook
 
-**Status:** In progress
-**Last updated:** 2026-09-21
-**Scope:** October-November 2024 establishment coverage incident
+**Status:** Investigation in progress
+**Last updated:** 2026-09-23
+**Scope:** Official October-November 2024 CNPJ reconstruction
 
 ## Objective
 
-Recover and validate the affected October 2024 establishment data while the
-official Receita Federal distribution endpoint remains unavailable. The
-alternative source is used for a controlled, reproducible investigation only.
-It must not silently replace the official source or modify production data.
+Explain and, if necessary, correct the official source-to-snapshot transition for October and November 2024 without modifying production data or existing Parquet outputs.
 
-## Evidence Preserved
+## Current Findings
 
-The independent source audit is stored under `audit_source_verification/`.
-The Casa dos Dados mirror provided 20 establishment archives:
+- The official WebDAV endpoint is accessible through the VPN.
+- The official October source contains `59,893,805` unique establishment keys after deduplication.
+- The local October Parquet contains the same `59,893,805` unique keys.
+- Official November contains `3,439,840` keys absent from official October.
+- October snapshots contain `3,054,993` establishment deletes.
+- November snapshots contain `3,439,840` establishment inserts.
+- Of the October-deleted and November-reinserted establishments, `2,692,100` were opened before 2024 and none were opened in November 2024.
 
-- October source directory: `2024-10-16`, ten archive parts.
-- November source directory: `2024-11-13`, ten archive parts.
-- All archives passed ZIP CRC validation.
-- SHA-256 checksums and row counts are recorded in
-  `alternative_source_report.json`.
-
-The key comparison recorded:
-
-| Month | Source unique keys | Local unique keys | Source-only keys | Reference-only keys | Status |
-| --- | ---: | ---: | ---: | ---: | --- |
-| 2024-10 | 62,983,669 | 59,893,805 | 3,089,864 | 0 | MISMATCH |
-| 2024-11 | 63,333,645 | 63,333,645 | 0 | 0 | MATCH |
-
-Therefore, the local October Parquet is a strict subset of the alternative
-October source by establishment key. The November Parquet matches the
-alternative source by key and row count.
+The reconstruction uses official Receita Federal files only.
 
 ## Controls
 
-1. Keep the original Parquet files and production tables unchanged.
-2. Store all alternative downloads, checksums, reports, and derived key lists
-   under `audit_source_verification/`.
-3. Use staging or a separate database for any rebuilt snapshots or panels.
-4. Record source URLs, source directory names, retrieval timestamps, file sizes,
-   and SHA-256 checksums.
-5. Do not classify the mirror as an official source without independent
-   confirmation from Receita Federal.
-6. Do not repair the panel by manually deleting October events or copying
-   November rows backward.
+1. Keep production tables, existing Parquets, and the original ETL unchanged.
+2. Download official files only into isolated audit directories.
+3. Preserve source URLs, retrieval timestamps, sizes, checksums, and row counts.
+4. Use a separate schema or database for any rebuilt snapshots.
+5. Use atomic output creation and persistent checkpoints.
+6. Do not classify mass delete/reinsert events as genuine business formation without payload and lineage evidence.
 
-## Current Next Check
+## Investigation Sequence
 
-Run `code/compare_missing_keys_to_snapshots.py`. It loads the alternative-only
-October keys into a PostgreSQL temporary table and compares them with October
-`estabelecimento` `DELETE` events in `public.snapshots`. The transaction is
-read-only and rolls back before the connection closes.
+1. Download and validate all official files used by snapshot generation for October and November.
+2. Compare official October and November states by normalized key and full payload.
+3. Compare expected state transitions with `public.snapshots` by table and change type.
+4. Audit staging completeness, `processed_files`, download checkpoints, deduplication, and deletion detection.
+5. Reproduce snapshot generation in an isolated schema or database.
+6. Compare `data_inicio_atividade` for affected records to distinguish new formation from old-record reentry.
+7. Only regenerate snapshots if the official source-to-snapshot comparison identifies a real ETL error.
+8. Rebuild the panel in a separate output directory only after snapshot validation.
 
-On 2026-09-21, the script passed syntax and workspace diagnostics. Execution
-was blocked in the current shell because the system Python lacks `psycopg2` and
-`python-dotenv`, the project virtual environment is located on a temporarily
-unresponsive synchronized path, and the `psql` client is not available on the
-shell `PATH`. No database connection was made and no data was changed.
+## Resumable Execution
 
-When the project environment is available, execute:
+Use `code/run_resumable_recovery.py` for isolated, checkpointed preparation. The orchestrator supports `manifest`, `validate`, and `keys` stages and updates its manifest after each archive.
 
 ```bash
-source .venv/bin/activate
-python code/compare_missing_keys_to_snapshots.py
+python code/run_resumable_recovery.py --stage manifest --source-root audit_source_verification/official_downloads
+python code/run_resumable_recovery.py --stage validate --source-root audit_source_verification/official_downloads
+python code/run_resumable_recovery.py --stage keys --source-root audit_source_verification/official_downloads
 ```
 
-If the virtual environment remains inaccessible, install or expose the
-project's declared dependencies in a local Python environment and run the same
-command there. Do not copy credentials into scripts or reports.
+The official source directories must be complete before running the full sequence. The current local official download is only the revised October `Estabelecimentos3.zip`; the remaining official files must be downloaded into the isolated directory first.
 
-The expected result is that all `3,089,864` source-only keys match October
-deletion events. A nonzero unmatched count must stop the recovery and trigger a
-new investigation of the source, parser, or snapshot generation process.
+## Performance Controls
 
-## Recovery Sequence
+Before any large rerun:
 
-1. Complete the source-only-to-snapshot deletion comparison.
-2. Obtain or reconstruct the October establishment and address staging files
-   from the alternative archives in an isolated workspace.
-3. Compare normalized keys, row counts, duplicate counts, and required fields.
-4. Re-run October change detection in staging and inspect the resulting delta
-   counts before any panel reconstruction.
-5. Rebuild October and November in a separate analytical schema or database.
-6. Run `ANALYZE` and use a safe `EXPLAIN (ANALYZE, BUFFERS)` test before the
-   large November insert.
-7. Validate continuity against September and November, including establishment
-   counts, key uniqueness, and the disappearance of the artificial mass
-   deletion/reinsertion pattern.
-8. Publish the result as an alternative-source reconstruction with an explicit
-   methodological limitation.
-9. Replace it with an official-source reconstruction only after the official
-   files become available and pass the same checks.
-
-## Resumable Preparation Orchestrator
-
-The new English-language orchestrator is `code/run_resumable_recovery.py`. It is
-independent from the original ETL and writes only to
-`audit_source_verification/resumable_recovery/`.
-
-It provides three checkpointed preparation stages:
-
-1. `manifest`: discovers the ten establishment archives for each month and
-   writes `recovery_manifest.json`.
-2. `validate`: validates each ZIP independently, records CRC success, SHA-256,
-   member metadata, and row count, then atomically updates the manifest after
-   each archive.
-3. `keys`: extracts and externally sorts establishment keys one archive at a
-   time, recording completion per archive.
-
-The first two stages have been executed successfully for all 20 archives. A
-second validation run confirmed resume behavior: all archives were reported as
-already complete and were not reprocessed.
-
-Example commands:
-
-```bash
-python code/run_resumable_recovery.py --stage manifest
-python code/run_resumable_recovery.py --stage validate
-python code/run_resumable_recovery.py --stage keys
-```
-
-The `keys` stage should be run only after checking available disk space. It
-creates sorted intermediate key files and can require tens of gigabytes. The
-source ZIPs, original Parquets, production database, and original ETL remain
-unchanged throughout these stages.
+- Run `ANALYZE` on relevant tables.
+- Use session-local `work_mem` settings.
+- Test the November insert with `EXPLAIN (ANALYZE, BUFFERS)` in isolation.
+- Materialize partner aggregates once where possible.
+- Process large inserts in batches with progress checkpoints.
 
 ## Acceptance Criteria
 
-The affected months can be treated as provisionally usable only when:
+The affected months are provisionally usable only when:
 
-- the source-only key comparison has no unexplained unmatched keys;
-- staging files pass structural, key, and duplicate checks;
+- official source keys and payloads pass structural and duplicate checks;
+- official source-to-snapshot differences are explained;
+- staging and processed-file lineage is documented;
 - October and November rebuild successfully outside production;
-- no persistent production table or existing Parquet was modified;
-- all source and transformation metadata are preserved; and
-- the dissertation documents the source outage and alternative-source use.
+- no existing Parquet or production table is modified; and
+- the dissertation documents the official source validation and remaining uncertainty.
 
-Until then, September 2024 remains the last fully validated panel month.
+Until then, the October-November panel outputs remain provisional.

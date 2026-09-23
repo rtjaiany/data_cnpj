@@ -1,9 +1,0 @@
-{
-  "month": "2024-10",
-  "source_only_file": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/key_compare/2024-10/source_only.keys",
-  "source_only_keys": 3089864,
-  "matching_snapshot_delete_keys": 3054993,
-  "unmatched_source_only_keys": 34871,
-  "status": "MISMATCH",
-  "database_changes": false
-}
