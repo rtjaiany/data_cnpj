@@ -1,7 +1,7 @@
 # Official Source Reconstruction Runbook
 
 **Status:** Investigation in progress
-**Last updated:** 2026-09-23
+**Last updated:** 2026-09-28
 **Scope:** Official October-November 2024 CNPJ reconstruction
 
 ## Objective
@@ -51,6 +51,39 @@ python code/run_resumable_recovery.py --stage keys --source-root audit_source_ve
 ```
 
 The official source directories must be complete before running the full sequence. The current local official download is only the revised October `Estabelecimentos3.zip`; the remaining official files must be downloaded into the isolated directory first.
+
+## Execution Attempt: 2026-09-28
+
+The official-only process was checked before starting any reconstruction.
+
+- The repository branch `cleanup` is four commits ahead of `origin/cleanup` and has no commits behind it.
+- The only local official archive currently available is `audit_source_verification/official_downloads/2024-10/Estabelecimentos3.zip`.
+- Complete official archive sets for September, October, and November are not currently present locally.
+- The official WebDAV request from the current shell returned HTTP `401 Unauthorized`.
+- No production tables, snapshots, Parquet outputs, or original ETL files were modified.
+- The isolated resumable manifest was not created because the required archive set is incomplete.
+
+This is an access/availability blocker, not evidence that the official source is offline. The official files must be obtained through the authenticated VPN/WebDAV connection and placed under `audit_source_verification/official_downloads/` before running the manifest, validation, and key stages.
+
+## Official Download and Validation: 2026-09-28
+
+The authenticated official WebDAV connection became available during the audit. A standalone English-language downloader was used:
+
+`code/download_official_establishment_archives.py`
+
+The downloader used one sequential request stream, a five-second pause between files, a 60-second connect/read timeout, retry backoff, HTTP range resumption, and an atomic manifest. It wrote only to `audit_source_verification/official_downloads/`.
+
+All 30 official establishment archives were downloaded or resumed successfully:
+
+| Reference month | Archives | Raw rows | CRC result |
+| --- | ---: | ---: | --- |
+| `2024-09` | 10 | 62,634,863 | PASS |
+| `2024-10` | 10 | 64,528,601 | PASS |
+| `2024-11` | 10 | 63,333,645 | PASS |
+
+Each archive contains exactly one CSV member and passed ZIP CRC validation. The validation output is recorded in `audit_source_verification/official_archive_validation.json`, and download sizes/checksums are recorded in `audit_source_verification/official_download_manifest.json`.
+
+No production tables, snapshots, Parquet outputs, or original ETL files were modified.
 
 ## Performance Controls
 

@@ -142,6 +142,9 @@ dmypy.json
 !/munic.csv
 /reconstructed_panel/
 /reconstructed_panel_audited/
+/reconstructed_panel_canonical/
+/reconstructed_panel_sensitivity/
+/audit_source_verification/
 /audit_source_verification/downloads/
 /audit_source_verification/official_downloads/
 /audit_source_verification/resumable_recovery/

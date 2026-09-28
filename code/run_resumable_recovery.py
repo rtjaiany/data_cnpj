@@ -74,6 +74,9 @@ def sha256_file(path: Path) -> str:
 
 def source_directory(source_root: Path, month: str) -> Path:
     matches = sorted(source_root.glob(f"{month}-*/"))
+    exact_directory = source_root / month
+    if exact_directory.is_dir():
+        matches.append(exact_directory)
     if len(matches) != 1:
         raise RuntimeError(f"Expected one source directory for {month}, found {matches}")
     return matches[0]
