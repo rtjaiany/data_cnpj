@@ -1,0 +1,12 @@
+{
+  "status": "broad_sensitivity_generated",
+  "rule": "active nationally in September + absent in October + present in SP in November",
+  "candidate_count": 2622,
+  "expected_rows": 1612140,
+  "actual_rows": 1612140,
+  "tagged_october_rows": 2622,
+  "proxy_reference_month": "2024-11",
+  "canonical_state_preserved": true,
+  "output": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/national_followup_aug_nov_2023/national_followup_sensitivity_broad_aug_nov_2023_cohorts.parquet",
+  "sha256": "85ecfc5e245697a8c2956987db96b2cb1923cac91c059d033fde71155c7aba8b"
+}

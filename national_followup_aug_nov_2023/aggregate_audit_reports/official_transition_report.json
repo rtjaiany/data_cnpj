@@ -1,0 +1,37 @@
+{
+  "months": {
+    "2024-09": {
+      "official_unique_keys": 62634863,
+      "reference_unique_keys": 62634863,
+      "official_only_keys": 0,
+      "reference_only_keys": 0,
+      "status": "MATCH"
+    },
+    "2024-10": {
+      "official_unique_keys": 59893805,
+      "reference_unique_keys": 59893805,
+      "official_only_keys": 0,
+      "reference_only_keys": 0,
+      "status": "MATCH"
+    },
+    "2024-11": {
+      "official_unique_keys": 63333645,
+      "reference_unique_keys": 63333645,
+      "official_only_keys": 0,
+      "reference_only_keys": 0,
+      "status": "MATCH"
+    }
+  },
+  "transitions": {
+    "2024-09_to_2024-10": {
+      "previous_only_keys": 3054993,
+      "current_only_keys": 313935,
+      "shared_keys": 59579870
+    },
+    "2024-10_to_2024-11": {
+      "previous_only_keys": 0,
+      "current_only_keys": 3439840,
+      "shared_keys": 59893805
+    }
+  }
+}

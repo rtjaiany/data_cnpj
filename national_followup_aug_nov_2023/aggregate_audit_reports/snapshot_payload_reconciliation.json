@@ -1,0 +1,27 @@
+{
+  "results": [
+    {
+      "month": "2024-10",
+      "event_type": "DELETE",
+      "counts": {
+        "payload_match": 3054989,
+        "snapshot_events": 3054993,
+        "missing_official_payload": 4
+      },
+      "field_mismatches": {},
+      "examples": []
+    },
+    {
+      "month": "2024-11",
+      "event_type": "INSERT",
+      "counts": {
+        "payload_match": 3054989,
+        "snapshot_events": 3054993,
+        "missing_official_payload": 4
+      },
+      "field_mismatches": {},
+      "examples": []
+    }
+  ],
+  "warning": "This audit compares snapshot payloads with official source payloads and does not modify production data."
+}

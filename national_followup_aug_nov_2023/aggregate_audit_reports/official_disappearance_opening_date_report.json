@@ -1,0 +1,21 @@
+{
+  "source_directory": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/official_downloads/2024-09",
+  "disappearance_keys": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/official_transition/transition_2024-09_to_2024-10_only_previous.keys",
+  "source_rows": 62634863,
+  "disappearance_key_count": 3054993,
+  "matched_metadata_count": 3054993,
+  "unmatched_metadata_count": 0,
+  "tag_counts": {
+    "pre_existing_active_in_september": 1696845,
+    "pre_existing_non_active_in_september": 1358148
+  },
+  "status_counts": {
+    "01": 1330,
+    "02": 1696845,
+    "03": 4897,
+    "04": 443612,
+    "08": 908309
+  },
+  "tagged_output": "/Users/rtjaiany/Library/CloudStorage/OneDrive-Personal/01_Documentos/01 - In Progress/03 - Dissertation/data_cnpj/audit_source_verification/official_disappearances/disappeared_establishments_tagged.tsv",
+  "warning": "Tags are audit candidates only; no record is automatically restored in the panel."
+}

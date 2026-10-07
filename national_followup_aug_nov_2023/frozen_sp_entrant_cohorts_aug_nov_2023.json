@@ -1,0 +1,17 @@
+{
+  "status": "frozen",
+  "frozen_distinct_establishments": 134345,
+  "original_comment_count": 134343,
+  "discrepancy": 2,
+  "cohort_definition": "data_inicio_atividade within origin month, uf=SP, situacao_cadastral=02 in the origin-month panel",
+  "cohort_counts": {
+    "2023-08": 41456,
+    "2023-09": 21516,
+    "2023-10": 40236,
+    "2023-11": 31137
+  },
+  "candidate_file": "frozen_sp_entrant_cohorts_aug_nov_2023.tsv",
+  "sha256": "6e5b58c542e6f831bcb3edeb264e5ef50884b46aaa480a8067671152ef4ffa6d",
+  "source_candidate_file": "frozen_sp_entrant_cohorts_aug_nov_2023.tsv",
+  "source_gap_status": "not yet defined; canonical follow-up only at this stage"
+}
