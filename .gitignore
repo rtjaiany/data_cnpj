@@ -153,3 +153,8 @@ scratch_quarantine_*.txt
 *.DS_Store
 *.pdf
 
+# Local national follow-up data files (large deliverables kept outside Git)
+/national_followup_aug_nov_2023/*.parquet
+/national_followup_aug_nov_2023/national_followup_canonical_aug_nov_2023_cohorts.tsv
+/national_followup_aug_nov_2023/frozen_sp_entrant_cohorts_aug_nov_2023.tsv
+/national_followup_aug_nov_2023/cohort_first_event_updates.tsv
